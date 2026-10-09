@@ -3,7 +3,8 @@ body{margin:0}
 img{max-width:100%}
 [hidden]{display:none!important}
 
-/* Layout: meja jajan. Kiri: kalender meja + papan gabus berisi sticky notes tanggal terpilih. Kanan: "aku yang mana" + rekap. Satu kolom di HP.
+/* Layout: meja jajan. Kiri: kalender meja + papan gabus berisi sticky notes tanggal terpilih. Kanan: "aku yang mana" + rekap.
+   Satu kolom di HP: "aku yang mana" di atas kalender, rekap di bawah papan.
    Tema: <html data-theme="light|dark|system">, dipilih lewat tombol Terang · Gelap · Sistem (default Terang). */
 :root{
   color-scheme:light;
@@ -108,6 +109,8 @@ h1,h2,h3{text-wrap:balance}
 @media (min-width:1024px){.layout{grid-template-columns:minmax(0,1fr) minmax(0,340px)}}
 .utama{display:flex;flex-direction:column;gap:24px;min-width:0}
 .side{display:flex;flex-direction:column;gap:16px}
+/* Satu kolom (HP & tablet tegak): panel "Aku yang mana?" naik ke paling atas, rekap tetap di bawah papan. */
+@media (max-width:1023.98px){.side{display:contents}.panel-aku{order:-1}}
 .panel{background:var(--panel);border:1px solid var(--rule);border-radius:var(--r);padding:16px 18px;display:flex;flex-direction:column;gap:12px}
 .panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);font-weight:700}
