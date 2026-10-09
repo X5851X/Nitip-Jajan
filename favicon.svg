@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Ikon tab: mangkuk bubuk matcha + dua daun (digambar ulang dari ikon kiriman user) -->
+  <g stroke="#231F20" stroke-width="3.4" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M11 27 C10.5 22 14 19.5 18 20.5 C19 15.5 24.5 13 29 15.5 C32 12.5 38.5 13 40.5 17.5 C45 16.5 50 19 51 23 C51.5 25 51.5 26 51 27 Z" fill="#CFE09A"/>
+    <g stroke="none" fill="#231F20">
+      <circle cx="18" cy="24" r="1.9"/><circle cx="24.5" cy="20.5" r="1.9"/><circle cx="30" cy="24.5" r="1.9"/>
+      <circle cx="35.5" cy="19.5" r="1.9"/><circle cx="42" cy="23.5" r="1.9"/>
+    </g>
+    <path d="M5 27 H59 C59 42 48 51 32 51 C16 51 5 42 5 27 Z" fill="#FFE893"/>
+    <path d="M40 50 C34.5 49.5 29.5 45.5 27.5 39.5 C34 39 39 43 40 50 Z" fill="#CFE09A"/>
+    <path d="M40 50 C42.5 42.5 49.5 37.5 58 37 C56 44.5 49.5 49.5 40 50 Z" fill="#CFE09A"/>
+    <path d="M38 47.5 L31.5 42.5 M42.5 47.5 L52.5 40.5" fill="none" stroke-width="2.2"/>
+  </g>
+</svg>

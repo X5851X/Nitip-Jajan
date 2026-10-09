@@ -1,0 +1,25 @@
+rules_version = '2';
+
+// Nitip Yuk
+// Siapa aja yang punya link boleh baca, nambah, ngubah, dan ngehapus catatan (sesuai permintaan: bisa diedit siapa aja).
+// Rules ini cuma jaga bentuk datanya biar nggak diisi sembarangan.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function catatanValid(d) {
+      return d.keys().hasOnly(['tanggal', 'waktu', 'beli', 'jenis', 'pembeli', 'warna', 'orang', 'dibuat', 'diubah', 'contoh', 'riwayat'])
+        && d.tanggal is string && d.tanggal.size() == 10
+        && d.beli is string && d.beli.size() > 0 && d.beli.size() <= 60
+        && d.pembeli is string && d.pembeli.size() > 0 && d.pembeli.size() <= 30
+        && d.orang is map && d.orang.size() <= 40
+        && d.dibuat is number && d.diubah is number
+        && (!('riwayat' in d) || (d.riwayat is map && d.riwayat.size() <= 60));
+    }
+
+    match /titipan-km/{id} {
+      allow read: if true;
+      allow create, update: if catatanValid(request.resource.data);
+      allow delete: if true;
+    }
+  }
+}

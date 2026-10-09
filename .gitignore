@@ -1,0 +1,7 @@
+# File sampah sistem & editor
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
+node_modules/

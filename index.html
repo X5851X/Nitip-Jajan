@@ -1,0 +1,190 @@
+<!doctype html>
+<!-- Nitip Yuk. Tanda pembuat (ikon di pojok kanan footer) dipasang & dijaga lewat js/util.js.
+     Wajib tetap ada dan alamatnya nggak boleh diganti ke akun lain, termasuk di salinan/fork yang di-deploy ulang.
+     Keep the author attribution visible and its link unchanged, including in forks. -->
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nitip Yuk</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<script>
+  // Pasang tema (Terang/Gelap/Sistem) sebelum halaman tampil, biar nggak kedip.
+  (function () {
+    var t = "light";
+    try { t = localStorage.getItem("nitipdong.tema") || "light"; } catch (e) {}
+    if (!/^(light|dark|system)$/.test(t)) t = "light";
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Patrick+Hand&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="logo-row">
+        <h1 class="logo">Nitip Yuk<span>!</span></h1>
+      </div>
+      <p class="tagline">Catatan titip jajan bareng-bareng. Pilih tanggal, tempel catatan siapa yang jajan, yang mau nitip tinggal nimbrung masukin nama.</p>
+      <div class="brand-meta">
+        <div class="status" id="status" data-state="loading" role="status" hidden><span class="dot"></span><span id="status-text"></span></div>
+        <div class="tema" role="radiogroup" aria-label="Tema tampilan">
+          <label><input type="radio" name="tema" value="light"><span>Terang</span></label>
+          <label><input type="radio" name="tema" value="dark"><span>Gelap</span></label>
+          <label><input type="radio" name="tema" value="system"><span>Sistem</span></label>
+        </div>      </div>
+    </div>
+    <div class="parade" id="parade" aria-hidden="true"></div>
+  </header>
+
+  <div class="notice" id="notice" role="alert" hidden></div>
+
+  <main class="layout">
+    <div class="utama">
+      <section class="kalender" aria-labelledby="kal-judul">
+        <div class="kal-top">
+          <button type="button" class="kal-nav" id="kal-prev" aria-label="Bulan sebelumnya">‹</button>
+          <h2 id="kal-judul" class="kal-judul" aria-live="polite">Bulan</h2>
+          <button type="button" class="kal-nav" id="kal-next" aria-label="Bulan berikutnya">›</button>
+          <button type="button" class="kal-hariini" id="kal-hariini">Hari ini</button>
+        </div>
+        <div class="kal-hari" aria-hidden="true"><span>Sen</span><span>Sel</span><span>Rab</span><span>Kam</span><span>Jum</span><span class="merah">Sab</span><span class="merah">Min</span></div>
+        <div class="kal-grid" id="kal-grid" aria-label="Pilih tanggal"></div>
+        <p class="kal-legenda"><span class="kal-dot"></span> ada yang belum lunas</p>
+      </section>
+
+      <section class="papan-wrap" id="papan-wrap" aria-labelledby="papan-judul">
+        <div class="papan-head">
+          <div class="papan-label">
+            <h2 id="papan-judul">Tanggal</h2>
+            <p id="papan-sub" class="muted"></p>
+          </div>
+          <button id="btn-baru" class="btn primary" type="button" hidden>+ Catatan baru</button>
+        </div>
+        <div id="papan" class="papan"></div>
+      </section>
+    </div>
+
+    <aside class="side">
+      <section class="panel" aria-labelledby="aku-h">
+        <div class="aku-row">
+          <label for="aku-select" id="aku-h" class="eyebrow">Aku yang mana?</label>
+          <select id="aku-select"><option value="">Pilih dulu ya</option></select>
+        </div>
+        <div id="aku-ringkas" class="aku-ringkas"><p class="muted">Pilih alias kamu, ntar keliatan kamu perlu balikin berapa ke siapa.</p></div>
+      </section>
+
+      <section class="panel" aria-labelledby="rekap-h">
+        <div class="panel-head">
+          <h2 id="rekap-h">Yang masih nyangkut</h2>
+          <button id="btn-salin" class="btn ghost small" type="button" aria-expanded="false" aria-controls="salin-box" hidden>Copas pengingat</button>
+        </div>
+        <div id="salin-box" class="salin-box" hidden>
+          <p id="salin-ket" class="salin-ket"></p>
+          <div class="salin-buat">
+            <label for="salin-orang">Buat</label>
+            <select id="salin-orang"></select>
+          </div>
+          <textarea id="salin-teks" spellcheck="false" placeholder="Pilih tiketnya dulu, ntar pesannya nongol di sini." aria-label="Isi pesan reminder, boleh diedit dulu"></textarea>
+          <div class="salin-aksi">
+            <button id="salin-salin" class="btn primary small" type="button">Copy pesannya</button>
+            <button id="salin-tutup" class="btn ghost small" type="button">Tutup</button>
+          </div>
+          <p class="hint">Mau diedit dulu juga boleh, bebas.</p>
+        </div>
+        <div id="rekap-body" class="rekap-body"><p class="muted">Bentar, nunggu catatan…</p></div>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="kaki">
+    <p>Siapa aja yang pegang link ini bisa nambah &amp; ngedit catatan, jadi share-nya di grup kamu aja ya. Pake alias biar santuy. Huruf gede-kecil gak ngaruh: “Kucing” sama “kucing” dihitung orang yang sama.</p>
+  </footer>
+</div>
+
+<dialog id="dlg" class="dlg" aria-labelledby="form-judul">
+  <form id="form" class="note note-form" novalidate>
+    <span class="tape" aria-hidden="true"></span>
+    <button type="button" class="f-tutup" id="btn-x" aria-label="Tutup, gak jadi">×</button>
+    <header class="f-head">
+      <span id="form-stk" class="f-stk"></span>
+      <div>
+        <h3 id="form-judul">Catatan jajan baru</h3>
+        <p class="f-tgl">buat <b id="form-tgl"></b></p>
+      </div>
+    </header>
+
+    <div class="step">
+      <span class="no" aria-hidden="true">1</span>
+      <div class="step-body">
+        <label for="f-pembeli" class="step-label">Siapa yang beli?</label>
+        <input id="f-pembeli" type="text" maxlength="30" autocomplete="off" placeholder="alias yang beliin, misal: kucing">
+      </div>
+    </div>
+
+    <div class="step">
+      <span class="no" aria-hidden="true">2</span>
+      <div class="step-body">
+        <label for="f-beli" class="step-label">Beli apa?</label>
+        <input id="f-beli" type="text" maxlength="60" autocomplete="off" placeholder="misal: Kopi Kenangan, mie ayam, Alfagift">
+        <div class="opsi">
+          <div class="mini-field">
+            <label for="f-jenis">Stiker</label>
+            <select id="f-jenis"></select>
+          </div>
+          <div class="mini-field" role="radiogroup" aria-labelledby="waktu-l">
+            <span id="waktu-l">Waktu</span>
+            <div class="pils" id="f-waktu"></div>
+          </div>
+        </div>
+        <p class="hint" id="jenis-tebakan"></p>
+      </div>
+    </div>
+
+    <div class="step" role="group" aria-labelledby="nitip-l">
+      <span class="no" aria-hidden="true">3</span>
+      <div class="step-body">
+        <span id="nitip-l" class="step-label">Siapa aja yang nitip?</span>
+        <div class="rows" id="rows"></div>
+        <div class="row-actions">
+          <button type="button" id="btn-tambah-baris" class="btn ghost small">+ Tambah orang</button>
+        </div>
+        <p class="hint">Kosongin juga gapapa, ntar yang nitip bisa masukin namanya sendiri. Nominal nyusul juga oke: tulis 25, 25k, atau 25000 (25 artinya 25 ribu).</p>
+      </div>
+    </div>
+
+    <div class="opsi lain">
+      <div class="mini-field">
+        <label for="f-tanggal">Tanggal</label>
+        <input id="f-tanggal" type="date">
+      </div>
+      <div class="mini-field" role="radiogroup" aria-labelledby="warna-l">
+        <span id="warna-l">Warna kertas</span>
+        <div class="swatches" id="f-warna"></div>
+      </div>
+    </div>
+
+    <p id="form-error" class="form-error" role="alert" hidden></p>
+    <div class="form-actions">
+      <button type="submit" class="btn primary" id="btn-simpan">Tempel catatan!</button>
+      <button type="button" class="btn ghost" id="btn-batal">Gak jadi</button>
+    </div>
+  </form>
+</dialog>
+
+<datalist id="dl-nama"></datalist>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="config.js"></script>
+<script src="js/util.js"></script>
+<script src="js/jajan.js"></script>
+<script src="js/store.js"></script>
+<script src="js/data.js"></script>
+<script src="js/tampilan.js"></script>
+<script src="js/aksi.js"></script>
+</body>
+</html>
