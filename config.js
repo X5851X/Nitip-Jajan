@@ -1,7 +1,8 @@
 /* Pengaturan Nitip Yuk.
-   Selama `firebase` masih null, web jalan di "mode coba": catatan cuma tersimpan di browser ini.
-   Biar satu tim lihat catatan yang sama, tempel firebaseConfig dari Firebase Console di sini
-   (langkahnya ada di README.md). Config Firebase untuk web memang bukan rahasia; yang menjaga data adalah rules Firestore. */
+   Kalau web ini jalan bareng worker.js (Cloudflare Workers), catatan otomatis disimpan di server dan sama di semua browser.
+   Di hosting statis biasa (tanpa worker), tempel firebaseConfig dari Firebase Console di sini biar satu tim lihat catatan yang sama
+   (langkahnya ada di README.md). Kalau dua-duanya nggak ada, catatan cuma tersimpan di browser masing-masing.
+   Config Firebase untuk web memang bukan rahasia; yang menjaga data adalah rules Firestore. */
 window.NITIP_CONFIG = {
   firebase: null,
   // firebase: {

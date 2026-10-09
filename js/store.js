@@ -1,6 +1,7 @@
 "use strict";
-/* Tempat nyimpen catatan. Dua mode dengan cara pakai yang sama:
-   - firebase: dipakai bareng satu tim (kalau config.js sudah diisi)
+/* Tempat nyimpen catatan. Tiga mode dengan cara pakai yang sama:
+   - server:   dipakai bareng lewat worker.js di alamat yang sama (otomatis kalau servernya ada)
+   - firebase: dipakai bareng lewat Firebase (kalau config.js diisi)
    - lokal:    mode coba, cuma tersimpan di browser ini
    Bentuk update pakai "jalur bertitik", misal { "orang.o1.lunas": true }. */
 
@@ -37,6 +38,134 @@ async function storeFirebase(cfg) {
     set: (id, data) => col.doc(id).set(data),
     update: (id, paths) => col.doc(id).update(siapkan(paths)),
     remove: (id) => col.doc(id).delete(),
+  };
+}
+
+/* Mode server: catatan disimpan worker.js di alamat yang sama dengan web ini, jadi semua browser lihat papan yang sama.
+   Perubahan dari browser lain dikabarin lewat WebSocket. Tiap catatan bawa nomor versi, biar kabar yang telat nggak nimpa yang baru. */
+const alamatApi = (p) => new URL("api/" + p, location.href).href;
+
+async function mintaApi(method, p, body) {
+  let r;
+  try {
+    r = await fetch(alamatApi(p), {
+      method, cache: "no-store",
+      headers: body ? { "content-type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch { throw Object.assign(new Error("koneksi putus"), { code: "unavailable" }); }
+  const j = await r.json().catch(() => null);
+  if (r.ok && j && j.ok === true) return j;
+  const code = (j && j.kode) || (r.status === 404 ? "not-found" : r.status === 429 ? "resource-exhausted" : r.status >= 500 ? "unavailable" : "invalid");
+  throw Object.assign(new Error((j && j.pesan) || "server " + r.status), { code });
+}
+
+/* Ada server di alamat yang sama? 404 atau bukan JSON berarti hosting statis biasa. */
+async function cariServer() {
+  if (!/^https?:$/.test(location.protocol)) return null;
+  try { return await mintaApi("GET", "titipan"); }
+  catch (e) { return e.code === "not-found" || e.code === "invalid" ? null : { versi: 0, catatan: [], putus: true }; }
+}
+
+function storeServer(cfg, awal) {
+  const subs = new Set();
+  const docs = new Map(); // id -> { v, data }; data null = udah dihapus
+  let ws = null, tunda = 1000, gagalBeruntun = 0, putus = !!awal.putus;
+
+  const pasang = (id, v, data) => {
+    const ada = docs.get(id);
+    if (ada && ada.v >= v) return false;
+    docs.set(id, { v, data: data || null });
+    return true;
+  };
+  const isiSemua = (j) => {
+    let berubah = false;
+    const ada = new Set();
+    for (const c of j.catatan) { ada.add(c.id); berubah = pasang(c.id, c.v, c.data) || berubah; }
+    for (const [id, x] of docs) if (!ada.has(id) && x.data && x.v <= j.versi) { docs.set(id, { v: j.versi, data: null }); berubah = true; }
+    return berubah;
+  };
+  const daftar = () => {
+    const semua = [];
+    for (const [id, x] of docs) if (x.data) semua.push({ id, data: x.data });
+    return semua;
+  };
+  const kabari = () => { const semua = daftar(); for (const s of subs) s.next(semua); };
+  const muatUlang = async () => {
+    try {
+      const berubah = isiSemua(await mintaApi("GET", "titipan"));
+      gagalBeruntun = 0;
+      if (berubah || putus) { putus = false; kabari(); }
+    } catch (e) {
+      if (++gagalBeruntun >= 2 && !putus) { putus = true; for (const s of subs) if (s.error) s.error(e); }
+    }
+  };
+  const sambung = () => {
+    if (ws || document.hidden || !window.WebSocket) return;
+    let s;
+    try { s = new WebSocket(alamatApi("live").replace(/^http/, "ws")); } catch { return; }
+    ws = s;
+    s.onopen = () => { tunda = 1000; muatUlang(); }; // kejar perubahan yang kelewat selama putus
+    s.onmessage = (e) => {
+      let m = null;
+      try { m = JSON.parse(e.data); } catch { /* "pong" */ }
+      if (m && typeof m.id === "string" && typeof m.v === "number" && pasang(m.id, m.v, m.data)) kabari();
+    };
+    s.onclose = () => {
+      if (ws !== s) return;
+      ws = null;
+      muatUlang();
+      setTimeout(sambung, tunda);
+      tunda = Math.min(tunda * 2, 60000);
+    };
+  };
+
+  /* Sekali per browser: catatan yang dulu cuma kesimpen di browser ini ikut diunggah, pakai ID yang sama
+     biar link yang udah sempat dibagi tetap kebuka. Catatan contoh nggak ikut. */
+  const pindahDariBrowser = async () => {
+    const KEY = "nitipdong.lokal." + (cfg.koleksi || "titipan-km"), tanda = KEY + ".pindah";
+    if (lsGet(tanda)) return;
+    let lama = {};
+    try { lama = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch { /* rusak, lewati */ }
+    let beres = true;
+    for (const [id, data] of Object.entries(lama)) {
+      if (!data || typeof data !== "object" || data.contoh === true) continue;
+      try {
+        const j = await mintaApi("POST", "titipan/" + encodeURIComponent(id) + "/pindah", { data });
+        if (j.data && pasang(j.id, j.v, j.data)) kabari();
+      } catch (e) { if (e.code === "unavailable") beres = false; }
+    }
+    if (beres) lsSet(tanda, "1");
+  };
+
+  if (!putus) isiSemua(awal);
+  sambung();
+  setInterval(() => { if (ws && ws.readyState === 1) ws.send("ping"); }, 45000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) return;
+    muatUlang();
+    if (!ws) { tunda = 1000; sambung(); }
+  });
+  if (!putus) pindahDariBrowser();
+
+  const jalur = (id) => "titipan/" + encodeURIComponent(id);
+  const terima = (j) => { if (pasang(j.id, j.v, j.data)) kabari(); };
+  return {
+    mode: "server",
+    subscribe(next, error) {
+      const s = { next, error };
+      subs.add(s);
+      setTimeout(() => { if (!putus) next(daftar()); else if (error) error({ code: "unavailable" }); }, 0);
+      return () => subs.delete(s);
+    },
+    newId: () => "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+    set: async (id, data) => terima(await mintaApi("PUT", jalur(id), { data })),
+    async update(id, paths) {
+      const ubah = {}, hapus = [];
+      for (const [k, v] of Object.entries(paths)) { if (v === HAPUS_FIELD) hapus.push(k); else ubah[k] = v; }
+      terima(await mintaApi("PATCH", jalur(id), { ubah, hapus }));
+    },
+    remove: async (id) => terima(await mintaApi("DELETE", jalur(id))),
   };
 }
 
@@ -131,7 +260,9 @@ async function bukaStore() {
     catch (e) {
       console.error("Nitip Yuk: Firebase gagal", e);
       S.catatanStore = "Gagal nyambung ke Firebase, jadi sementara catatan cuma kesimpen di browser ini. Cek config.js sama koneksi internetnya ya.";
+      return storeLokal(cfg);
     }
   }
-  return storeLokal(cfg);
+  const awal = await cariServer();
+  return awal ? storeServer(cfg, awal) : storeLokal(cfg);
 }

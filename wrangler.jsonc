@@ -1,0 +1,11 @@
+// Cloudflare Workers: file statis disajikan langsung, /api/* diurus worker.js (catatan disimpan di Durable Object "Papan").
+{
+  "name": "nitip-yuk",
+  "main": "worker.js",
+  "compatibility_date": "2025-09-01",
+  "assets": { "directory": ".", "binding": "ASSETS" },
+  "durable_objects": {
+    "bindings": [{ "name": "PAPAN", "class_name": "Papan" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Papan"] }]
+}

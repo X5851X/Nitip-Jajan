@@ -280,8 +280,9 @@ function gagal(e) {
   console.warn("Nitip Yuk: gagal nyimpen", e);
   const c = e && (e.code || e.name);
   if (c === "permission-denied") toast("Firebase nolak perubahannya. Cek rules Firestore-nya (ada di README).");
-  else if (c === "resource-exhausted") toast("Kuota Firebase hari ini abis. Coba lagi besok ya.");
+  else if (c === "resource-exhausted") toast("Penyimpanannya lagi penuh atau kuota hari ini abis. Coba lagi nanti ya.");
   else if (c === "not-found") toast("Yah, catatan ini udah dihapus orang lain.");
+  else if (c === "invalid") toast("Isinya ditolak server, mungkin ada yang kepanjangan. Cek lagi ya.");
   else if (c === "QuotaExceededError") toast("Memori browser penuh. Hapus catatan lama dulu ya.");
   else toast("Gagal nyimpen nih. Cek koneksi terus coba lagi ya.");
 }

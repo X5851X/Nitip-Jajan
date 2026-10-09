@@ -1,0 +1,10 @@
+# File yang nggak ikut disajikan sebagai halaman web
+.git
+.gitignore
+.wrangler
+node_modules
+worker.js
+wrangler.jsonc
+firestore.rules
+README.md
+docs

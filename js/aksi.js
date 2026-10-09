@@ -445,7 +445,7 @@ function langganan() {
     console.error("Nitip Yuk: gagal baca", err);
     S.galat = err && err.code === "permission-denied"
       ? "Firebase nolak akses nih. Cek rules Firestore-nya (ada di README)."
-      : "Koneksi ke Firebase putus. Coba refresh halamannya ya.";
+      : "Koneksinya lagi putus. Tunggu bentar atau coba refresh halamannya ya.";
     setStatus("error", "Gagal nyambung");
     setNotice(S.galat);
     renderSemua();

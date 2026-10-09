@@ -27,13 +27,15 @@ Catatan titip jajan bareng dalam bentuk kalender dan sticky notes. Klik tanggal,
 | `index.html` | Struktur halaman: header, kalender, papan, rekap, dialog catatan baru |
 | `style.css` | Semua tampilan (mode terang dan gelap) |
 | `favicon.svg` | Ikon tab (mangkuk matcha) |
-| `config.js` | Pengaturan Firebase. Masih `null` berarti catatan cuma tersimpan di browser masing-masing |
+| `config.js` | Pengaturan Firebase (cuma perlu kalau nggak pakai `worker.js`) |
 | `js/util.js` | Helper: tanggal, nominal Rupiah, alias hewan |
 | `js/jajan.js` | Stiker kartun jajanan, warna kertas, tebak jenis jajanan dari teks |
 | `js/store.js` | Penyimpanan: Firebase atau browser |
 | `js/data.js` | Hitungan: total, yang masih nyangkut, pesan pengingat, riwayat |
 | `js/tampilan.js` | Gambar kalender, sticky notes, tiket, dan rekap |
 | `js/aksi.js` | Klik dan ketik: catatan baru, ikut nitip, isi nominal, lunas, hapus |
+| `worker.js` | Server kecil buat nyimpen catatan bareng (Cloudflare Workers + Durable Objects) |
+| `wrangler.jsonc`, `.assetsignore` | Pengaturan worker-nya, sama daftar file yang nggak ikut disajikan |
 | `firestore.rules` | Aturan Firestore buat ditempel di Firebase Console |
 
 Nggak ada proses build. Semua file langsung dipakai apa adanya.
@@ -42,9 +44,13 @@ Nggak ada proses build. Semua file langsung dipakai apa adanya.
 
 Buka lewat server lokal (misalnya ekstensi **Live Server** di VS Code, atau `npx serve`), lalu buka `http://127.0.0.1:...`.
 
-Selama `config.js` belum diisi, catatan cuma tersimpan di browser itu, dan ada dua catatan contoh (kopi pagi dan mie ayam siang, ditandai "Contoh").
+Cara ini nggak jalanin `worker.js`, jadi catatan cuma tersimpan di browser itu, dan ada dua catatan contoh (kopi pagi dan mie ayam siang, ditandai "Contoh"). Mau nyoba yang pakai server: jalankan `npx wrangler dev`, lalu buka alamat yang muncul.
 
-## Biar dipakai bareng satu tim: Firebase (gratis)
+## Biar dipakai bareng satu tim
+
+Kalau web ini jalan bareng `worker.js` di Cloudflare Workers, catatan otomatis disimpan di server (Durable Object) dan semua browser lihat papan yang sama, termasuk perubahan langsung dari orang lain. Nggak perlu setting apa-apa. Catatan yang sebelumnya cuma kesimpen di browser ikut dipindah ke server waktu web dibuka pertama kali (kecuali catatan contoh).
+
+Kalau dipasang di hosting statis biasa tanpa worker, pakai Firebase (gratis):
 
 1. Buka <https://console.firebase.google.com>, klik **Add project**, kasih nama misalnya `nitip-yuk`. Google Analytics boleh dimatikan.
 2. Di menu **Build → Firestore Database**, klik **Create database**. Pilih lokasi `asia-southeast2 (Jakarta)`, lalu mulai dalam **production mode**.
@@ -77,5 +83,5 @@ Web ini cuma file statis (HTML, CSS, JS) tanpa proses build, jadi tinggal kamu d
 ## Soal keamanan
 
 - **Config Firebase bukan rahasia.** Config untuk web memang selalu kelihatan di browser. Yang ngatur siapa boleh apa adalah rules Firestore.
-- **Siapa aja yang tahu link bisa ngedit.** Rules sekarang ngizinin siapa aja baca dan nulis, sesuai permintaan "bisa diedit siapa aja". Jadi bagiin link-nya cuma di grup kamu, dan pakai alias.
+- **Siapa aja yang tahu link bisa ngedit.** Server di `worker.js` dan rules Firestore sama-sama ngizinin siapa aja baca dan nulis, sesuai permintaan "bisa diedit siapa aja". Yang dicek cuma bentuk dan ukuran datanya. Jadi bagiin link-nya cuma di grup kamu, dan pakai alias.
 - **Kalau nanti mau dikunci,** bisa ditambah login Google dengan daftar email anggota tim di rules.

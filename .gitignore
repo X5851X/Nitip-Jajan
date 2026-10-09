@@ -5,3 +5,5 @@ desktop.ini
 .vscode/
 .idea/
 node_modules/
+.wrangler/
+.dev.vars
