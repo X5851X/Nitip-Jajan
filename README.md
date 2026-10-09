@@ -8,6 +8,8 @@ Catatan titip jajan bareng dalam bentuk kalender dan sticky notes. Klik tanggal,
 
 ![Papan sticky notes dan tiket yang nyambung jadi satu gulungan](docs/tampilan-2.png)
 
+![Form catatan jajan baru](docs/tampilan-3.png)
+
 ## Fiturnya
 
 - **Kalender + papan sticky notes.** Satu tanggal bisa punya banyak catatan (pagi kopi, siang mie ayam, dst). Sabtu–Minggu ditandai tanggal merah.
