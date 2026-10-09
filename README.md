@@ -28,7 +28,7 @@ Catatan titip jajan bareng dalam bentuk kalender dan sticky notes. Klik tanggal,
 | `style.css` | Semua tampilan (mode terang dan gelap) |
 | `favicon.svg` | Ikon tab (mangkuk matcha) |
 | `config.js` | Pengaturan Firebase. Masih `null` berarti catatan cuma tersimpan di browser masing-masing |
-| `js/util.js` | Helper: tanggal, nominal Rupiah, alias hewan, tanda pembuat |
+| `js/util.js` | Helper: tanggal, nominal Rupiah, alias hewan |
 | `js/jajan.js` | Stiker kartun jajanan, warna kertas, tebak jenis jajanan dari teks |
 | `js/store.js` | Penyimpanan: Firebase atau browser |
 | `js/data.js` | Hitungan: total, yang masih nyangkut, pesan pengingat, riwayat |
@@ -79,7 +79,3 @@ Web ini cuma file statis (HTML, CSS, JS) tanpa proses build, jadi tinggal kamu d
 - **Config Firebase bukan rahasia.** Config untuk web memang selalu kelihatan di browser. Yang ngatur siapa boleh apa adalah rules Firestore.
 - **Siapa aja yang tahu link bisa ngedit.** Rules sekarang ngizinin siapa aja baca dan nulis, sesuai permintaan "bisa diedit siapa aja". Jadi bagiin link-nya cuma di grup kamu, dan pakai alias.
 - **Kalau nanti mau dikunci,** bisa ditambah login Google dengan daftar email anggota tim di rules.
-
-## Tanda pembuat
-
-Ikon GitHub di pojok kanan bawah adalah tanda pembuat asli web ini dan dijaga otomatis. Tolong jangan dihapus, disembunyiin, atau diganti alamatnya, termasuk di salinan atau fork.
