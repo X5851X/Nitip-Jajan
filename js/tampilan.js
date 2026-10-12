@@ -193,15 +193,11 @@ function buildNote(n) {
   const rek = s.st === "paid" ? [] : rekening(data);
   if (rek.length) foot.append(h("div", { class: "n-tf" },
     h("span", { class: "n-tf-judul" }, "Transfer ke"),
-    h("ul", null, rek.map((r, i) => h("li", null,
+    h("ul", null, rek.map((r) => h("li", null,
       h("div", { class: "tf-isi" },
         h("b", null, r.jenis || "Rekening"),
         r.nomor ? h("span", { class: "tf-nomor" }, r.nomor) : null,
-        r.nama ? h("span", { class: "tf-an" }, "a.n. " + r.nama) : null),
-      r.nomor ? h("button", {
-        type: "button", class: "btn small ghost tf-salin", "data-act": "salin-rek", "data-rek": String(i), "data-fk": "rek:" + i,
-        "aria-label": `Copy nomor ${r.jenis || "rekening"} ${r.nomor}`,
-      }, "Copy") : null)))));
+        r.nama ? h("span", { class: "tf-an" }, "a.n. " + r.nama) : null))))));
   if (!ro) {
     const yakin = S.confirm && S.confirm.kind === "hapus" && S.confirm.id === id;
     foot.append(h("div", { class: "n-aksi" }, yakin

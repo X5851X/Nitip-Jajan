@@ -293,24 +293,6 @@ async function lunasinBaris(id, lineId) {
 async function keClipboard(teks) {
   try { await navigator.clipboard.writeText(teks); return true; } catch { return false; }
 }
-/* Copy nomor rekening/e-wallet dari sticky note. Spasi & strip dibuang kalau isinya angka semua. */
-async function salinRekening(id, i) {
-  const doc = cariDoc(id), r = doc && rekening(doc.data)[Number(i)];
-  if (!r || !r.nomor) return;
-  const polos = r.nomor.replace(/[\s.-]/g, "");
-  const teks = /^\+?\d+$/.test(polos) ? polos : r.nomor;
-  let ok = await keClipboard(teks);
-  if (!ok) { // cadangan buat browser lama: lewat kolom teks sementara
-    const ta = document.createElement("textarea");
-    ta.value = teks; ta.readOnly = true;
-    ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
-    document.body.append(ta);
-    ta.select(); ta.setSelectionRange(0, teks.length);
-    try { ok = document.execCommand("copy"); } catch { ok = false; }
-    ta.remove();
-  }
-  toast(ok ? `Nomor ${r.jenis || "rekening"} udah ke-copy!` : `Gagal copy, salin manual ya: ${teks}`);
-}
 /* Buka kotak copas. `teksKhusus` diisi kalau copy otomatis gagal, biar bisa disalin manual. */
 function bukaSalin(teksKhusus) {
   S.salin = { orang: "", edited: false, ids: "" };
@@ -382,9 +364,7 @@ function pasangEvent() {
     else if (a === "lunas") toggleLunas(id, b.dataset.line);
     else if (a === "ikut") bukaJoin(id);
     else if (a === "ikut-batal") tutupJoin(id);
-    else if (a === "ingetin") ingetinCatatan(id);
-    else if (a === "salin-rek") salinRekening(id, b.dataset.rek);
-    else if (a === "riwayat") {
+    else if (a === "ingetin") ingetinCatatan(id);    else if (a === "riwayat") {
       if (S.riwayatBuka.has(id)) S.riwayatBuka.delete(id); else S.riwayatBuka.add(id);
       S.fokus = { id, fk: "riwayat" };
       renderPapan();

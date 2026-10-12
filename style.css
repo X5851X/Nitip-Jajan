@@ -263,7 +263,6 @@ button.kal-sel:hover{border-color:var(--accent)}
 .tf-isi b{font-weight:700}
 .tf-nomor{font-variant-numeric:tabular-nums;font-weight:600;letter-spacing:.02em;overflow-wrap:anywhere}
 .tf-an{flex-basis:100%;font-size:12px;color:var(--ink-soft)}
-.tf-salin{flex:none}
 .note .btn.ghost{background:rgb(255 255 255 / .3)}
 .n-riwayat-btn{align-self:flex-start;font-size:12px;font-weight:600;color:var(--ink-soft);background:none;border:0;padding:2px 0;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
 .n-riwayat-btn:hover{color:var(--ink)}
@@ -449,7 +448,7 @@ button.kal-sel:hover{border-color:var(--accent)}
   /* iPhone nge-zoom otomatis kalau tulisan di kolom isian di bawah 16px */
   input:not([type=checkbox]):not([type=radio]),select,textarea{font-size:16px!important}
   /* tombol kecil dibikin lebih gampang dipencet jari */
-  .mini,.n-lunas,.isi,.chip,.tf-salin{min-height:36px}
+  .mini,.n-lunas,.isi,.chip{min-height:36px}
   .n-riwayat-btn{padding:8px 0}
   .tema span{padding:7px 12px}
   .nom-edit{width:120px}
