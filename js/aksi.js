@@ -18,6 +18,19 @@ function tambahBaris(o = {}) {
   $("#rows").append(row);
   return row;
 }
+/* Baris "Transfer ke mana?": nama | bank/e-wallet | nomor, semuanya isian bebas. */
+function tambahRekening(r = {}) {
+  const id = idBaru();
+  const row = h("div", { class: "tf-row" },
+    h("input", { class: "t-nama", id: "t-nama-" + id, type: "text", maxlength: "40", autocomplete: "off", placeholder: "nama (a.n.)", "aria-label": "Atas nama", value: r.nama || "" }),
+    h("input", { class: "t-jenis", id: "t-jenis-" + id, type: "text", maxlength: "30", autocomplete: "off", placeholder: "bank / e-wallet", "aria-label": "Bank atau e-wallet", value: r.jenis || "" }),
+    h("input", { class: "t-nomor", id: "t-nomor-" + id, type: "text", inputmode: "tel", maxlength: "40", autocomplete: "off", placeholder: "no. rek / no. HP", "aria-label": "Nomor rekening atau nomor HP", value: r.nomor || "" }),
+    h("button", { type: "button", class: "r-hapus", "aria-label": "Hapus rekening ini" }, "×"));
+  $("#tf-rows").append(row);
+  updTf();
+  return row;
+}
+function updTf() { $("#btn-tambah-tf").hidden = $("#tf-rows").children.length >= MAKS_REKENING; }
 function updForm() {
   const tgl = $("#f-tanggal").value;
   $("#form-tgl").textContent = parseTgl(tgl) ? tglPanjang(tgl) : "";
@@ -52,6 +65,9 @@ function bukaForm(mode, id) {
   $("#rows").replaceChildren();
   if (d) for (const l of baris(d)) tambahBaris(l);
   if (!$("#rows").children.length) tambahBaris();
+  $("#tf-rows").replaceChildren();
+  for (const r of rekening(d)) tambahRekening(r);
+  if (!$("#tf-rows").children.length) tambahRekening();
   formError("");
   updForm();
   const dlg = $("#dlg");
@@ -87,10 +103,18 @@ async function simpanForm(ev) {
     if (Number.isNaN(j)) return formError(`Nominal “${iNom.value.trim()}” gak kebaca. Coba tulis 25000 atau 25k.`, iNom);
     orang[row.dataset.id] = { nama, pesanan, jumlah: j, lunas: j != null && j > 0 && row.dataset.lunas === "1", urut: ++urut };
   }
+  const transfer = [];
+  for (const row of $("#tf-rows").children) {
+    const r = { nama: rapikan($(".t-nama", row).value).slice(0, 40), jenis: rapikan($(".t-jenis", row).value).slice(0, 30), nomor: rapikan($(".t-nomor", row).value).slice(0, 40) };
+    if (!r.nama && !r.jenis && !r.nomor) continue;
+    if (!r.jenis && !r.nomor) return formError("Transfer ke mana? Isi bank/e-wallet atau nomornya dulu ya.", $(".t-jenis", row));
+    transfer.push(r);
+  }
   const isi = {
     tanggal, waktu: getRadio("waktu"), beli, jenis: jenisValid($("#f-jenis").value) ? $("#f-jenis").value : "",
     pembeli, warna: getRadio("warna") || "kuning", orang,
   };
+  if (transfer.length) isi.transfer = transfer.slice(0, MAKS_REKENING);
   const now = Date.now();
   const btn = $("#btn-simpan");
   btn.disabled = true;
@@ -269,6 +293,24 @@ async function lunasinBaris(id, lineId) {
 async function keClipboard(teks) {
   try { await navigator.clipboard.writeText(teks); return true; } catch { return false; }
 }
+/* Copy nomor rekening/e-wallet dari sticky note. Spasi & strip dibuang kalau isinya angka semua. */
+async function salinRekening(id, i) {
+  const doc = cariDoc(id), r = doc && rekening(doc.data)[Number(i)];
+  if (!r || !r.nomor) return;
+  const polos = r.nomor.replace(/[\s.-]/g, "");
+  const teks = /^\+?\d+$/.test(polos) ? polos : r.nomor;
+  let ok = await keClipboard(teks);
+  if (!ok) { // cadangan buat browser lama: lewat kolom teks sementara
+    const ta = document.createElement("textarea");
+    ta.value = teks; ta.readOnly = true;
+    ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+    document.body.append(ta);
+    ta.select(); ta.setSelectionRange(0, teks.length);
+    try { ok = document.execCommand("copy"); } catch { ok = false; }
+    ta.remove();
+  }
+  toast(ok ? `Nomor ${r.jenis || "rekening"} udah ke-copy!` : `Gagal copy, salin manual ya: ${teks}`);
+}
 /* Buka kotak copas. `teksKhusus` diisi kalau copy otomatis gagal, biar bisa disalin manual. */
 function bukaSalin(teksKhusus) {
   S.salin = { orang: "", edited: false, ids: "" };
@@ -341,6 +383,7 @@ function pasangEvent() {
     else if (a === "ikut") bukaJoin(id);
     else if (a === "ikut-batal") tutupJoin(id);
     else if (a === "ingetin") ingetinCatatan(id);
+    else if (a === "salin-rek") salinRekening(id, b.dataset.rek);
     else if (a === "riwayat") {
       if (S.riwayatBuka.has(id)) S.riwayatBuka.delete(id); else S.riwayatBuka.add(id);
       S.fokus = { id, fk: "riwayat" };
@@ -405,7 +448,7 @@ function pasangEvent() {
   let tekanDiLuar = false;
   $("#dlg").addEventListener("pointerdown", (e) => { tekanDiLuar = e.target === e.currentTarget; });
   $("#dlg").addEventListener("click", (e) => { if (e.target === e.currentTarget && tekanDiLuar) tutupForm(); tekanDiLuar = false; });
-  $("#dlg").addEventListener("close", () => { S.form = null; });
+  $("#dlg").addEventListener("close", () => { if (!$("#dlg").open) S.form = null; });
   $("#form").addEventListener("submit", simpanForm);
   $("#f-beli").addEventListener("input", updForm);
   $("#f-jenis").addEventListener("change", updForm);
@@ -426,6 +469,17 @@ function pasangEvent() {
     if (!$("#rows").children.length) tambahBaris();
     $(".r-nama", next || $("#rows").lastElementChild).focus();
     updForm();
+  });
+  $("#btn-tambah-tf").addEventListener("click", () => {
+    if ($("#tf-rows").children.length < MAKS_REKENING) $(".t-nama", tambahRekening()).focus();
+  });
+  $("#tf-rows").addEventListener("click", (e) => {
+    const b = e.target.closest(".r-hapus"); if (!b) return;
+    const row = b.closest(".tf-row"), next = row.nextElementSibling || row.previousElementSibling;
+    row.remove();
+    if (!$("#tf-rows").children.length) tambahRekening();
+    updTf();
+    $(".t-nama", next || $("#tf-rows").lastElementChild).focus();
   });
 }
 

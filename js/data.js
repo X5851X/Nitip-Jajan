@@ -107,6 +107,16 @@ const kapanCatatan = (d) => tglPendek(d.tanggal) + (waktuValid(d.waktu) ? `, ${l
 /* Yang masih perlu ditagih di satu catatan: belum lunas, atau nominalnya belum diitung. */
 function belumBeres(d) { const pk = kunci(d.pembeli); return baris(d).filter((l) => kunci(l.nama) !== pk && !l.lunas && l.jumlah !== 0); }
 const isiBaris = (l) => `${l.jumlah == null ? "belum diitung" : rp(l.jumlah)}${l.pesanan ? ` (${l.pesanan})` : ""}`;
+/* "Transfer ke mana?": maks 3 rekening/e-wallet per catatan, isinya ditulis bebas (BCA, DANA, GoPay, dst). */
+const MAKS_REKENING = 3;
+function rekening(d) {
+  const a = d && Array.isArray(d.transfer) ? d.transfer : [];
+  return a.filter((r) => r && typeof r === "object")
+    .map((r) => ({ nama: rapikan(r.nama).slice(0, 40), jenis: rapikan(r.jenis).slice(0, 30), nomor: rapikan(r.nomor).slice(0, 40) }))
+    .filter((r) => r.jenis || r.nomor)
+    .slice(0, MAKS_REKENING);
+}
+const teksRekening = (r) => [r.jenis, r.nomor].filter(Boolean).join(" ") + (r.nama ? ` a.n. ${r.nama}` : "");
 
 /* Tiket = catatan yang masih ada tagihannya (belum lunas / belum diitung).
    Urut tanggal dari yang paling lama, terus pagi > siang > sore. */
@@ -184,6 +194,8 @@ function bedaCatatan(lama, baru) {
     if (o.lunas !== !!l.lunas) out.push(l.lunas ? `${l.nama} lunas` : `${l.nama} batal lunas`);
   }
   for (const [k, o] of L) if (!B.has(k)) out.push(`hapus ${o.nama}`);
+  const tfLama = rekening(lama).map(teksRekening).join("|"), tfBaru = rekening(baru).map(teksRekening).join("|");
+  if (tfLama !== tfBaru) out.push(!tfLama ? "nambah info transfer" : !tfBaru ? "hapus info transfer" : "ganti info transfer");
   return out.join(", ");
 }
 /* Reminder satu sticky note. Kalau belum ada yang nitip, jadinya ajakan nitip. */
@@ -201,6 +213,7 @@ function pesanCatatan(id) {
   for (const l of belum) out.push(`- ${l.nama}: ${isiBaris(l)}`);
   out.push("");
   if (s.nyangkut > 0) out.push(`Total yang belum balik ${rp(s.nyangkut)}, transfer ke ${pb} ya.`);
+  for (const r of rekening(d)) out.push(`💳 ${teksRekening(r)}`);
   if (s.pending) out.push("Yang belum diitung, nominalnya nyusul ya.");
   out.push("Makasih yaa!", `Cek di sini ya: ${link}`);
   return out.join("\n");
@@ -228,6 +241,7 @@ function pesanGabungan(ids, dk) {
     else {
       for (const l of belum) out.push(`- ${l.nama}: ${isiBaris(l)}`);
       if (s.nyangkut > 0) out.push(`Transfer ke ${pb} ya, total ${rp(s.nyangkut)}.`);
+      for (const r of rekening(d)) out.push(`💳 ${teksRekening(r)}`);
       if (s.pending) adaPending = true;
     }
     out.push(`Link: ${linkCatatan(id, d)}`, "");
@@ -239,19 +253,22 @@ function pesanGabungan(ids, dk) {
 function pesanJapri(docs, dk) {
   const kenal = namaDikenal().find((n) => n.key === dk);
   const nama = kenal ? kenal.nama : dk;
-  const isi = [], kePembeli = new Set();
+  const isi = [], kePembeli = new Set(), rek = [];
   let total = 0, adaPending = false;
   for (const { id, data: d } of docs) {
     const l = belumBeres(d).find((x) => kunci(x.nama) === dk);
     if (!l) continue;
     const pb = rapikan(d.pembeli) || "?";
     isi.push(`- ${labelCatatan(d)} (dibeliin ${pb}): ${isiBaris(l)}`, `  ${linkCatatan(id, d)}`);
+    for (const r of rekening(d)) rek.push([pb, teksRekening(r)]);
     if (l.jumlah == null) adaPending = true;
     else { total += l.jumlah; kePembeli.add(pb); }
   }
   if (!isi.length) return `Hai ${nama}, di catatan yang dipilih gak ada titipan kamu yang nyangkut. Aman!`;
   const out = [`Hai ${nama}, mau ngingetin titipan jajan nih 🙏`, "", ...isi, ""];
   if (total) out.push(kePembeli.size === 1 ? `Transfer ke ${[...kePembeli][0]} ya, total ${rp(total)}.` : `Total ${rp(total)}, transfer ke masing-masing yang beli ya.`);
+  const satuPembeli = new Set(rek.map(([pb]) => kunci(pb))).size <= 1;
+  for (const t of new Set(rek.map(([pb, x]) => (satuPembeli ? x : `${pb}: ${x}`)))) out.push(`💳 ${t}`);
   if (adaPending) out.push("Yang belum diitung, nominalnya nyusul ya.");
   out.push("Makasih yaa!");
   return out.join("\n");

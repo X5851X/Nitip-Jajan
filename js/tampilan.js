@@ -190,6 +190,18 @@ function buildNote(n) {
     h("div", { class: "nyangkut" }, h("dt", null, "Masih nyangkut"), h("dd", null, s.nyangkut > 0 ? h("mark", null, rp(s.nyangkut)) : rp(0)))));
   const stTeks = { kosong: "Nunggu yang mau nitip", pending: `${s.pending} orang belum diitung`, owe: `Nunggu ${s.orangNyangkut} orang transfer`, paid: "Lunas semua, mantul!" }[s.st];
   const foot = h("footer", { class: "n-foot" }, h("span", { class: "n-state st-" + s.st }, stTeks));
+  const rek = s.st === "paid" ? [] : rekening(data);
+  if (rek.length) foot.append(h("div", { class: "n-tf" },
+    h("span", { class: "n-tf-judul" }, "Transfer ke"),
+    h("ul", null, rek.map((r, i) => h("li", null,
+      h("div", { class: "tf-isi" },
+        h("b", null, r.jenis || "Rekening"),
+        r.nomor ? h("span", { class: "tf-nomor" }, r.nomor) : null,
+        r.nama ? h("span", { class: "tf-an" }, "a.n. " + r.nama) : null),
+      r.nomor ? h("button", {
+        type: "button", class: "btn small ghost tf-salin", "data-act": "salin-rek", "data-rek": String(i), "data-fk": "rek:" + i,
+        "aria-label": `Copy nomor ${r.jenis || "rekening"} ${r.nomor}`,
+      }, "Copy") : null)))));
   if (!ro) {
     const yakin = S.confirm && S.confirm.kind === "hapus" && S.confirm.id === id;
     foot.append(h("div", { class: "n-aksi" }, yakin

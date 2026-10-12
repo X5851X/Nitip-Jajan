@@ -15,8 +15,9 @@ const MAKS_CATATAN = 5000;
 const MAKS_BODY = 100000;
 const POLA_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const TERLARANG = new Set(["__proto__", "constructor", "prototype"]);
-const KUNCI_CATATAN = new Set(["tanggal", "waktu", "beli", "jenis", "pembeli", "warna", "orang", "dibuat", "diubah", "contoh", "riwayat"]);
+const KUNCI_CATATAN = new Set(["tanggal", "waktu", "beli", "jenis", "pembeli", "warna", "orang", "dibuat", "diubah", "contoh", "riwayat", "transfer"]);
 const KUNCI_ORANG = new Set(["nama", "pesanan", "jumlah", "lunas", "urut"]);
+const KUNCI_REKENING = new Set(["nama", "jenis", "nomor"]);
 const KUNCI_RIWAYAT = new Set(["t", "oleh", "teks"]);
 
 export default {
@@ -85,6 +86,13 @@ function cekCatatan(d) {
     for (const [k, r] of Object.entries(d.riwayat)) {
       if (!idValid(k) || !peta(r) || !kunciAman(r, KUNCI_RIWAYAT) || !angka(r.t)
         || !boleh(r.oleh, (x) => teks(x, 0, 60)) || !teks(r.teks, 0, 500)) return "Riwayatnya nggak valid";
+    }
+  }
+  if (d.transfer !== undefined) {
+    if (!Array.isArray(d.transfer) || d.transfer.length > 3) return "Info transfer maksimal 3";
+    for (const r of d.transfer) {
+      if (!peta(r) || !kunciAman(r, KUNCI_REKENING) || !boleh(r.nama, (x) => teks(x, 0, 40))
+        || !boleh(r.jenis, (x) => teks(x, 0, 30)) || !boleh(r.nomor, (x) => teks(x, 0, 40))) return "Info transfernya nggak valid";
     }
   }
   if (JSON.stringify(d).length > 60000) return "Catatannya kegedean";
