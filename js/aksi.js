@@ -9,7 +9,7 @@ function tambahBaris(o = {}) {
   const nom = o.jumlah == null ? "" : String(o.jumlah);
   const pv = previewNominal(nom);
   const row = h("div", { class: "row", "data-id": id, "data-lunas": o.lunas ? "1" : "0" },
-    h("input", { class: "r-nama", id: "r-nama-" + id, type: "text", maxlength: "30", autocomplete: "off", placeholder: "nama, misal: kelinci", "aria-label": "Nama yang nitip", value: o.nama || "" }),
+    h("input", { class: "r-nama", id: "r-nama-" + id, type: "text", list: "dl-nama", maxlength: "30", autocomplete: "off", placeholder: "nama, misal: kelinci", "aria-label": "Nama yang nitip", value: o.nama || "" }),
     h("input", { class: "r-pesan", id: "r-pesan-" + id, type: "text", maxlength: "80", autocomplete: "off", placeholder: "nitip apa (opsional)", "aria-label": "Nitip apa", value: o.pesanan || "" }),
     h("div", { class: "r-nom-wrap" },
       h("input", { class: "r-nom", id: "r-nom-" + id, type: "text", inputmode: "decimal", autocomplete: "off", placeholder: "nominal (nyusul)", "aria-label": "Nominal", value: nom }),
@@ -31,6 +31,27 @@ function tambahRekening(r = {}) {
   return row;
 }
 function updTf() { $("#btn-tambah-tf").hidden = $("#tf-rows").children.length >= MAKS_REKENING; }
+/* Nama yang pernah ada di catatan lain (paling sering duluan): tinggal pencet, langsung masuk daftar yang nitip.
+   Yang udah ada di daftar atau lagi jadi yang beli nggak ditampilin. */
+const MAKS_NAMA_CEPAT = 15;
+function renderNamaCepat() {
+  const box = $("#nama-cepat");
+  if (!S.form) { box.hidden = true; return; }
+  const pakai = new Set($$(".r-nama", $("#rows")).map((i) => kunci(i.value)).filter(Boolean));
+  const pb = kunci($("#f-pembeli").value);
+  const list = namaDikenal().filter((n) => n.key !== pb && !pakai.has(n.key)).slice(0, MAKS_NAMA_CEPAT);
+  $("#nama-cepat-list").replaceChildren(...list.map((n) => h("button", {
+    type: "button", class: "chip", "data-nama": n.nama, "aria-label": `Tambahin ${n.nama} ke yang nitip`,
+  }, ava(n.nama, "kecil"), n.nama)));
+  box.hidden = !list.length;
+}
+/* Masukin nama ke baris yang masih kosong, atau bikin baris baru. */
+function pakaiNama(nama) {
+  const kosong = [...$("#rows").children].find((row) => !$(".r-nama", row).value.trim() && !$(".r-pesan", row).value.trim() && !$(".r-nom", row).value.trim());
+  const row = kosong || tambahBaris();
+  $(".r-nama", row).value = nama;
+  updForm();
+}
 function updForm() {
   const tgl = $("#f-tanggal").value;
   $("#form-tgl").textContent = parseTgl(tgl) ? tglPanjang(tgl) : "";
@@ -42,6 +63,7 @@ function updForm() {
   $("#f-jenis").options[0].textContent = `Auto (${labelJenis(auto)})`;
   $("#jenis-tebakan").textContent = jenisValid(pilihan) && pilihan !== auto ? `Auto-nya sih ${labelJenis(auto)}, tapi kamu pilih ${labelJenis(pilihan)}.` : "";
   $("#form").style.setProperty("--note", kertasBg(getRadio("warna")));
+  renderNamaCepat();
 }
 function formError(msg, el) {
   const p = $("#form-error");
@@ -441,6 +463,17 @@ function pasangEvent() {
       const pv = previewNominal(t.value), out = $(".r-preview", t.parentElement);
       out.textContent = pv.text; out.classList.toggle("err", pv.err);
     } else if (t.classList.contains("r-pesan")) updForm();
+    else if (t.classList.contains("r-nama")) renderNamaCepat();
+  });
+  $("#f-pembeli").addEventListener("input", renderNamaCepat);
+  $("#nama-cepat-list").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-nama]"); if (!b) return;
+    const i = [...b.parentElement.children].indexOf(b), pakaiKeyboard = b.matches(":focus-visible");
+    pakaiNama(b.dataset.nama);
+    // Pakai keyboard: fokus pindah ke nama berikutnya, biar bisa langsung Enter lagi
+    if (!pakaiKeyboard) return;
+    const sisa = $("#nama-cepat-list").children;
+    (sisa.length ? sisa[Math.min(i, sisa.length - 1)] : $("#btn-tambah-baris")).focus();
   });
   $("#rows").addEventListener("click", (e) => {
     const b = e.target.closest(".r-hapus"); if (!b) return;
