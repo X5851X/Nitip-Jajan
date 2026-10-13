@@ -9,7 +9,7 @@ function tambahBaris(o = {}) {
   const nom = o.jumlah == null ? "" : String(o.jumlah);
   const pv = previewNominal(nom);
   const row = h("div", { class: "row", "data-id": id, "data-lunas": o.lunas ? "1" : "0" },
-    h("input", { class: "r-nama", id: "r-nama-" + id, type: "text", list: "dl-nama", maxlength: "30", autocomplete: "off", placeholder: "nama, misal: kelinci", "aria-label": "Nama yang nitip", value: o.nama || "" }),
+    h("input", { class: "r-nama", id: "r-nama-" + id, type: "text", maxlength: "30", autocomplete: "off", placeholder: "nama, misal: kelinci", "aria-label": "Nama yang nitip", value: o.nama || "" }),
     h("input", { class: "r-pesan", id: "r-pesan-" + id, type: "text", maxlength: "80", autocomplete: "off", placeholder: "nitip apa (opsional)", "aria-label": "Nitip apa", value: o.pesanan || "" }),
     h("div", { class: "r-nom-wrap" },
       h("input", { class: "r-nom", id: "r-nom-" + id, type: "text", inputmode: "decimal", autocomplete: "off", placeholder: "nominal (nyusul)", "aria-label": "Nominal", value: nom }),
