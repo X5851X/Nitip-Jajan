@@ -158,6 +158,36 @@
           <button type="button" id="btn-tambah-baris" class="btn ghost small">+ Tambah orang</button>
         </div>
         <p class="hint">Kosongin juga gapapa, ntar yang nitip bisa masukin namanya sendiri. Nominal nyusul juga oke: tulis 25, 25k, atau 25000 (25 artinya 25 ribu).</p>
+        <div class="biaya" id="biaya">
+          <span class="biaya-judul" id="biaya-l">Ada ongkir, pajak, atau diskon?</span>
+          <div class="biaya-rows" id="biaya-rows" role="group" aria-labelledby="biaya-l"></div>
+          <div class="biaya-tambah">
+            <button type="button" class="btn ghost small" data-biaya="ongkir">+ Ongkir</button>
+            <button type="button" class="btn ghost small" data-biaya="pajak">+ Pajak 10%</button>
+            <button type="button" class="btn ghost small" data-biaya="ppn">+ PPN 11%</button>
+            <button type="button" class="btn ghost small" data-biaya="diskon">− Diskon</button>
+            <button type="button" class="btn ghost small" data-biaya="lain">+ Biaya lain</button>
+          </div>
+          <div class="opsi biaya-opsi" id="biaya-opsi" hidden>
+            <div class="mini-field">
+              <label for="f-harga-pembeli">Pesanan yang beli sendiri</label>
+              <div class="r-nom-wrap">
+                <input id="f-harga-pembeli" type="text" inputmode="decimal" autocomplete="off" placeholder="opsional">
+                <span class="r-preview" id="harga-pembeli-pv"></span>
+              </div>
+            </div>
+            <div class="mini-field">
+              <label for="f-bulat">Bulatin ke atas</label>
+              <select id="f-bulat">
+                <option value="100">Rp100</option>
+                <option value="500">Rp500</option>
+                <option value="1000">Rp1.000</option>
+                <option value="1">Nggak usah</option>
+              </select>
+            </div>
+          </div>
+          <p class="hint" id="biaya-ringkas"></p>
+        </div>
       </div>
     </div>
 

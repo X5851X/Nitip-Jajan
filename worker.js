@@ -15,9 +15,11 @@ const MAKS_CATATAN = 5000;
 const MAKS_BODY = 100000;
 const POLA_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const TERLARANG = new Set(["__proto__", "constructor", "prototype"]);
-const KUNCI_CATATAN = new Set(["tanggal", "waktu", "beli", "jenis", "pembeli", "warna", "orang", "dibuat", "diubah", "contoh", "riwayat", "transfer"]);
+const KUNCI_CATATAN = new Set(["tanggal", "waktu", "beli", "jenis", "pembeli", "warna", "orang", "dibuat", "diubah", "contoh", "riwayat", "transfer",
+  "biaya", "hargaPembeli", "bulat"]);
 const KUNCI_ORANG = new Set(["nama", "pesanan", "jumlah", "lunas", "urut"]);
 const KUNCI_REKENING = new Set(["nama", "jenis", "nomor"]);
+const KUNCI_BIAYA = new Set(["nama", "nilai", "persen", "kurang", "bagi"]);
 const KUNCI_RIWAYAT = new Set(["t", "oleh", "teks"]);
 
 export default {
@@ -95,6 +97,16 @@ function cekCatatan(d) {
         || !boleh(r.jenis, (x) => teks(x, 0, 30)) || !boleh(r.nomor, (x) => teks(x, 0, 40))) return "Info transfernya nggak valid";
     }
   }
+  if (d.biaya !== undefined) {
+    if (!Array.isArray(d.biaya) || d.biaya.length > 8) return "Biaya tambahan maksimal 8";
+    const bool = (x) => typeof x === "boolean";
+    for (const b of d.biaya) {
+      if (!peta(b) || !kunciAman(b, KUNCI_BIAYA) || !boleh(b.nama, (x) => teks(x, 0, 30)) || !angka(b.nilai) || b.nilai < 0 || b.nilai > 1e9
+        || !boleh(b.persen, bool) || !boleh(b.kurang, bool) || !boleh(b.bagi, (x) => x === "rata" || x === "harga")) return "Biaya tambahannya nggak valid";
+    }
+  }
+  if (!boleh(d.hargaPembeli, (x) => x === null || (angka(x) && x >= 0 && x <= 1e9))) return "Harga pesanan yang beli nggak valid";
+  if (!boleh(d.bulat, (x) => [1, 100, 500, 1000].includes(x))) return "Pembulatannya nggak valid";
   if (JSON.stringify(d).length > 60000) return "Catatannya kegedean";
   return "";
 }

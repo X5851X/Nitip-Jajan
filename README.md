@@ -14,6 +14,7 @@ Catatan titip jajan bareng dalam bentuk kalender dan sticky notes. Klik tanggal,
 
 - **Kalender + papan sticky notes.** Satu tanggal bisa punya banyak catatan (pagi kopi, siang mie ayam, dst). Sabtu–Minggu ditandai tanggal merah.
 - **Catatan baru:** siapa yang beli, beli apa, siapa aja yang nitip. Nominal boleh nyusul (`25`, `25k`, atau `25000` sama-sama jadi Rp25.000). Nama yang pernah nitip tinggal dipencet, nggak usah ngetik ulang.
+- **Ongkir, PPN, diskon, dan biaya lain** bisa ditambahin di catatan. Tagihan tiap orang dihitung otomatis: persen dan diskon dibagi sesuai harga pesanan, ongkir dibagi rata (cara baginya bisa diganti). Yang beli bisa ikut kebagian kalau dia juga pesen, dan hasilnya dibulatin ke atas.
 - **"Aku nitip juga ya!"** buat nambahin nama sendiri ke catatan orang.
 - **Transfer ke mana:** yang beli bisa nulis sampai 3 rekening atau e-wallet (bebas, misal BCA atau DANA). Infonya tampil di sticky note dan ikut masuk ke pesan pengingat.
 - **Tiket "Yang masih nyangkut":** rekap per jajanan kayak tiket bioskop, urut tanggal, bisa tandain lunas.

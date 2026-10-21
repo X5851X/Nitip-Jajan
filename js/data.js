@@ -26,15 +26,63 @@ const cariDoc = (id) => S.docs.find((d) => d.id === id);
 
 /* Data bersama itu input orang lain: selalu dibaca hati-hati. */
 const angka = (v) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null);
+/* Baris yang nitip. `harga` = nominal yang diketik, `jumlah` = tagihan akhirnya (harga + bagian biaya tambahan). */
 function baris(d) {
   const o = d && d.orang && typeof d.orang === "object" && !Array.isArray(d.orang) ? d.orang : {};
-  return Object.entries(o)
+  const ls = Object.entries(o)
     .filter(([, v]) => v && typeof v === "object" && rapikan(v.nama))
     .map(([id, v]) => ({
       id, nama: rapikan(v.nama).slice(0, 30), pesanan: rapikan(v.pesanan).slice(0, 80),
-      jumlah: angka(v.jumlah), lunas: v.lunas === true, urut: Number(v.urut) || 0,
+      harga: angka(v.jumlah), jumlah: angka(v.jumlah), lunas: v.lunas === true, urut: Number(v.urut) || 0,
     }))
     .sort((a, b) => a.urut - b.urut || a.id.localeCompare(b.id));
+  const tg = hitungTagihan(d);
+  if (tg) for (const l of ls) if (tg.tagihan.has(l.id)) l.jumlah = tg.tagihan.get(l.id);
+  return ls;
+}
+
+/* ---------- biaya tambahan: ongkir, PPN, diskon, dll ----------
+   Persen & "sesuai harga" dibagi sebanding harga pesanan, "rata" dibagi sama rata per orang.
+   Yang beli ikut kebagian kalau harga pesanannya sendiri diisi. Tagihan dibulatin ke atas (default Rp100).
+   Selama masih ada yang nominalnya kosong, biaya belum dibagi (bagiannya tergantung semua harga). */
+const MAKS_BIAYA = 8;
+const BULATAN = [100, 500, 1000, 1];
+function daftarBiaya(d) {
+  const a = d && Array.isArray(d.biaya) ? d.biaya : [];
+  return a.filter((b) => b && typeof b === "object" && angka(b.nilai) > 0)
+    .slice(0, MAKS_BIAYA)
+    .map((b) => ({
+      nama: rapikan(b.nama).slice(0, 30) || (b.kurang === true ? "Potongan" : "Biaya lain"),
+      nilai: b.nilai, persen: b.persen === true, kurang: b.kurang === true, bagi: b.bagi === "rata" ? "rata" : "harga",
+    }));
+}
+const bulatanCatatan = (d) => (BULATAN.includes(d && d.bulat) ? d.bulat : 100);
+function hitungTagihan(d) {
+  const biaya = daftarBiaya(d);
+  if (!biaya.length) return null;
+  const o = d.orang && typeof d.orang === "object" && !Array.isArray(d.orang) ? d.orang : {};
+  const pk = kunci(d.pembeli), ikut = [];
+  let hp = angka(d.hargaPembeli) || 0, tunggu = false;
+  for (const [id, v] of Object.entries(o)) {
+    if (!v || typeof v !== "object" || !rapikan(v.nama)) continue;
+    const h = angka(v.jumlah);
+    if (kunci(v.nama) === pk) { hp += h || 0; continue; } // "punya sendiri" = pesanan yang beli
+    if (h == null) tunggu = true;
+    else if (h > 0) ikut.push([id, h]); // 0 = ditraktir, nggak ikut nanggung
+  }
+  const subtotal = ikut.reduce((s, [, h]) => s + h, 0), dasar = subtotal + hp, n = ikut.length + (hp > 0 ? 1 : 0);
+  const rinci = biaya.map((b) => ({ ...b, rp: b.persen ? (dasar * b.nilai) / 100 : b.nilai }));
+  const out = { biaya: rinci, subtotal, hp, dasar, tunggu, unit: bulatanCatatan(d), tagihan: new Map(), bagianPembeli: hp };
+  if (tunggu || !dasar) return out;
+  const bagian = (h) => rinci.reduce((s, b) => s + (b.kurang ? -1 : 1) * (b.persen || b.bagi === "harga" ? (b.rp * h) / dasar : b.rp / n), 0);
+  for (const [id, h] of ikut) out.tagihan.set(id, Math.ceil(Math.max(0, Math.round(h + bagian(h))) / out.unit) * out.unit);
+  if (hp > 0) out.bagianPembeli = Math.max(0, Math.round(hp + bagian(hp)));
+  return out;
+}
+/* Buat pesan reminder: "Udah termasuk Ongkir, PPN, Diskon." */
+function ketBiaya(d) {
+  const tg = hitungTagihan(d);
+  return tg && tg.tagihan.size ? `Udah termasuk ${tg.biaya.map((b) => b.nama).join(", ")}.` : "";
 }
 function jenisNote(d) {
   if (jenisValid(d.jenis)) return d.jenis;
@@ -189,11 +237,16 @@ function bedaCatatan(lama, baru) {
   for (const [k, l] of B) {
     const o = L.get(k);
     if (!o) { out.push(`nambah ${l.nama}`); continue; }
-    if (o.jumlah !== l.jumlah) out.push(l.jumlah == null ? `ngosongin nominal ${l.nama}` : `nominal ${l.nama} jadi ${rp(l.jumlah)}`);
+    if (o.harga !== l.jumlah) out.push(l.jumlah == null ? `ngosongin nominal ${l.nama}` : `nominal ${l.nama} jadi ${rp(l.jumlah)}`);
     if (o.pesanan !== rapikan(l.pesanan)) out.push(`pesanan ${l.nama} jadi “${rapikan(l.pesanan) || "-"}”`);
     if (o.lunas !== !!l.lunas) out.push(l.lunas ? `${l.nama} lunas` : `${l.nama} batal lunas`);
   }
   for (const [k, o] of L) if (!B.has(k)) out.push(`hapus ${o.nama}`);
+  const sigBiaya = (d) => JSON.stringify([daftarBiaya(d), angka(d.hargaPembeli) || 0, bulatanCatatan(d)]);
+  if (sigBiaya(lama) !== sigBiaya(baru)) {
+    const bl = daftarBiaya(lama), bb = daftarBiaya(baru);
+    out.push(!bl.length ? `nambah ${bb.map((b) => b.nama).join(", ")}` : !bb.length ? "hapus biaya tambahan" : "ganti biaya tambahan");
+  }
   const tfLama = rekening(lama).map(teksRekening).join("|"), tfBaru = rekening(baru).map(teksRekening).join("|");
   if (tfLama !== tfBaru) out.push(!tfLama ? "nambah info transfer" : !tfBaru ? "hapus info transfer" : "ganti info transfer");
   return out.join(", ");
@@ -211,6 +264,7 @@ function pesanCatatan(id) {
   if (!belum.length) return `${beli} (${kapan}) dibeliin ${pb}: udah lunas semua. Makasih, gaes!\n${link}`;
   const out = ["Reminder titipan jajan 🙏", `${beli} · ${kapan}`, `Yang beli: ${pb}`, ""];
   for (const l of belum) out.push(`- ${l.nama}: ${isiBaris(l)}`);
+  if (ketBiaya(d)) out.push(ketBiaya(d));
   out.push("");
   if (s.nyangkut > 0) out.push(`Total yang belum balik ${rp(s.nyangkut)}, transfer ke ${pb} ya.`);
   for (const r of rekening(d)) out.push(`💳 ${teksRekening(r)}`);
@@ -240,6 +294,7 @@ function pesanGabungan(ids, dk) {
     else if (!belum.length) out.push("Udah lunas semua.");
     else {
       for (const l of belum) out.push(`- ${l.nama}: ${isiBaris(l)}`);
+      if (ketBiaya(d)) out.push(ketBiaya(d));
       if (s.nyangkut > 0) out.push(`Transfer ke ${pb} ya, total ${rp(s.nyangkut)}.`);
       for (const r of rekening(d)) out.push(`💳 ${teksRekening(r)}`);
       if (s.pending) adaPending = true;
@@ -259,7 +314,9 @@ function pesanJapri(docs, dk) {
     const l = belumBeres(d).find((x) => kunci(x.nama) === dk);
     if (!l) continue;
     const pb = rapikan(d.pembeli) || "?";
-    isi.push(`- ${labelCatatan(d)} (dibeliin ${pb}): ${isiBaris(l)}`, `  ${linkCatatan(id, d)}`);
+    isi.push(`- ${labelCatatan(d)} (dibeliin ${pb}): ${isiBaris(l)}`);
+    if (ketBiaya(d)) isi.push(`  ${ketBiaya(d)}`);
+    isi.push(`  ${linkCatatan(id, d)}`);
     for (const r of rekening(d)) rek.push([pb, teksRekening(r)]);
     if (l.jumlah == null) adaPending = true;
     else { total += l.jumlah; kePembeli.add(pb); }

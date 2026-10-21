@@ -6,7 +6,8 @@ function setRadio(name, value) { for (const r of $$(`input[name="${name}"]`)) r.
 function getRadio(name) { const r = $(`input[name="${name}"]:checked`); return r ? r.value : ""; }
 function tambahBaris(o = {}) {
   const id = o.id || idBaru();
-  const nom = o.jumlah == null ? "" : String(o.jumlah);
+  const harga = "harga" in o ? o.harga : o.jumlah; // yang diketik = harga, bukan tagihan akhir
+  const nom = harga == null ? "" : String(harga);
   const pv = previewNominal(nom);
   const row = h("div", { class: "row", "data-id": id, "data-lunas": o.lunas ? "1" : "0" },
     h("input", { class: "r-nama", id: "r-nama-" + id, type: "text", maxlength: "30", autocomplete: "off", placeholder: "nama, misal: kelinci", "aria-label": "Nama yang nitip", value: o.nama || "" }),
@@ -31,6 +32,108 @@ function tambahRekening(r = {}) {
   return row;
 }
 function updTf() { $("#btn-tambah-tf").hidden = $("#tf-rows").children.length >= MAKS_REKENING; }
+/* Biaya tambahan di langkah 3: tanda (+/−), nama, nominal/persen, cara bagi.
+   Pajak resto/kafe (PB1) umumnya 10%, PPN barang 11%. Persen & namanya tetap bisa diganti (misal PPh lewat "Biaya lain"). */
+const PRESET_BIAYA = {
+  ongkir: { nama: "Ongkir", mode: "rata" },
+  pajak: { nama: "Pajak", nilai: "10", mode: "persen" },
+  ppn: { nama: "PPN", nilai: "11", mode: "persen" },
+  diskon: { nama: "Diskon", kurang: true, mode: "harga" },
+  lain: { nama: "", mode: "rata" },
+};
+function tambahBiaya(b = {}) {
+  const row = h("div", { class: "b-row", "data-kurang": b.kurang ? "1" : "0" },
+    h("button", { type: "button", class: "b-tanda", title: "Pencet buat ganti: nambah atau ngurangin" }, b.kurang ? "−" : "+"),
+    h("input", { class: "b-nama", type: "text", maxlength: "30", autocomplete: "off", placeholder: b.kurang ? "misal: voucher" : "misal: biaya layanan", "aria-label": "Nama biaya", value: b.nama || "" }),
+    h("div", { class: "b-nilai-wrap" },
+      h("input", { class: "b-nilai", type: "text", inputmode: "decimal", autocomplete: "off", "aria-label": "Nominal atau persen", value: b.nilai == null ? "" : String(b.nilai).replace(".", ",") }),
+      h("span", { class: "r-preview b-preview" })),
+    h("select", { class: "b-mode", "aria-label": "Cara ngitung" },
+      h("option", { value: "rata" }, "Rp, bagi rata"),
+      h("option", { value: "harga" }, "Rp, sesuai harga"),
+      h("option", { value: "persen" }, "% dari harga")),
+    h("button", { type: "button", class: "r-hapus", "aria-label": "Hapus biaya ini" }, "×"));
+  $(".b-mode", row).value = ["rata", "harga", "persen"].includes(b.mode) ? b.mode : "rata";
+  tandaBiaya(row);
+  $("#biaya-rows").append(row);
+  return row;
+}
+function tandaBiaya(row) {
+  const kurang = row.dataset.kurang === "1", persen = $(".b-mode", row).value === "persen";
+  const t = $(".b-tanda", row);
+  t.textContent = kurang ? "−" : "+";
+  t.setAttribute("aria-label", kurang ? "Ngurangin. Pencet buat ganti jadi nambah" : "Nambah. Pencet buat ganti jadi ngurangin");
+  $(".b-nilai", row).placeholder = persen ? "misal: 10" : "misal: 10000";
+}
+/* "11", "2,5", "11%" -> 11 / 2.5; kosong -> null; ngaco atau di atas 100 -> NaN */
+function parsePersen(raw) {
+  const s = String(raw ?? "").replace(/%/g, "").trim().replace(",", ".");
+  if (!s) return null;
+  if (!/^\d+(\.\d+)?$/.test(s)) return NaN;
+  const p = Math.round(Number(s) * 100) / 100;
+  return p > 100 ? NaN : p;
+}
+/* Baca baris biaya dari form. `err` = [pesan, kolom] kalau ada yang nggak kebaca (buat simpan); `list` = yang valid aja. */
+function bacaBiayaForm() {
+  const list = [];
+  let err = null;
+  for (const row of $("#biaya-rows").children) {
+    const nama = rapikan($(".b-nama", row).value).slice(0, 30), iNilai = $(".b-nilai", row), teks = iNilai.value.trim();
+    const mode = $(".b-mode", row).value, kurang = row.dataset.kurang === "1", persen = mode === "persen";
+    if (!nama && !teks) continue;
+    const nilai = persen ? parsePersen(teks) : parseNominal(teks);
+    if (nilai == null) { err = err || [`Nominal ${nama || "biayanya"} diisi dulu ya.`, iNilai]; continue; }
+    if (Number.isNaN(nilai)) {
+      err = err || [persen ? `Persen “${teks}” gak kebaca. Tulis angka aja, misal 11.` : `Nominal “${teks}” gak kebaca. Coba tulis 10000 atau 10k.`, iNilai];
+      continue;
+    }
+    if (nilai > 0) list.push({ nama: nama || (kurang ? "Potongan" : "Biaya lain"), nilai, persen, kurang, bagi: mode === "rata" ? "rata" : "harga" });
+  }
+  return { list, err };
+}
+/* Catatan sementara dari isi form, buat ngitung tagihan sebelum disimpan. */
+function docDariForm() {
+  const orang = {};
+  for (const row of $("#rows").children) {
+    const nama = rapikan($(".r-nama", row).value), nom = $(".r-nom", row).value;
+    if (!nama && !nom.trim()) continue;
+    const j = parseNominal(nom);
+    orang[row.dataset.id] = { nama: nama || "?", jumlah: Number.isNaN(j) ? null : j };
+  }
+  const hp = parseNominal($("#f-harga-pembeli").value);
+  return { pembeli: $("#f-pembeli").value, orang, biaya: bacaBiayaForm().list, hargaPembeli: Number.isNaN(hp) ? null : hp, bulat: Number($("#f-bulat").value) };
+}
+/* Hitung ulang tagihan di form: "= Rp22.000 → Rp21.700" di tiap orang, plus ringkasannya. */
+function updTagihan() {
+  const tg = hitungTagihan(docDariForm());
+  for (const row of $("#rows").children) {
+    const nom = $(".r-nom", row), out = $(".r-preview", row), pv = previewNominal(nom.value);
+    const akhir = tg && tg.tagihan.get(row.dataset.id), harga = parseNominal(nom.value);
+    out.textContent = pv.text + (akhir != null && akhir !== harga ? ` → ${rp(akhir)}` : "");
+    out.classList.toggle("err", pv.err);
+  }
+  for (const row of $("#biaya-rows").children) {
+    const teks = $(".b-nilai", row).value, persen = $(".b-mode", row).value === "persen", out = $(".b-preview", row);
+    const v = persen ? parsePersen(teks) : parseNominal(teks);
+    out.classList.toggle("err", Number.isNaN(v));
+    out.textContent = v == null ? "" : Number.isNaN(v) ? "nggak kebaca" : persen ? `${String(v).replace(".", ",")}%` + (tg && tg.dasar ? ` = ${rp((tg.dasar * v) / 100)}` : "") : "= " + rp(v);
+  }
+  const ada = $("#biaya-rows").children.length > 0;
+  $("#biaya-opsi").hidden = !ada;
+  const hpv = previewNominal($("#f-harga-pembeli").value), hpOut = $("#harga-pembeli-pv");
+  hpOut.textContent = hpv.text === "= ditraktir" ? "" : hpv.text;
+  hpOut.classList.toggle("err", hpv.err);
+  const ket = $("#biaya-ringkas");
+  if (!ada || !tg) ket.textContent = ada ? "Isi nominal biayanya, ntar kebagi otomatis ke yang nitip." : "";
+  else if (tg.tunggu) ket.textContent = "Biayanya kebagi otomatis setelah semua nominal yang nitip keisi.";
+  else if (!tg.tagihan.size) ket.textContent = "Isi nominal yang nitip dulu, ntar biayanya kebagi otomatis.";
+  else {
+    const total = [...tg.tagihan.values()].reduce((s, x) => s + x, 0);
+    ket.textContent = `Harga pesanan ${rp(tg.subtotal)} → total ditagih ${rp(total)}` + (tg.hp > 0
+      ? `, yang beli nanggung ${rp(tg.bagianPembeli)}.`
+      : ". Yang beli juga pesen? Isi harga pesanannya biar ongkir dkk ikut kebagi ke dia.");
+  }
+}
 /* Nama yang pernah ada di catatan lain (paling sering duluan): tinggal pencet, langsung masuk daftar yang nitip.
    Yang udah ada di daftar atau lagi jadi yang beli nggak ditampilin. */
 const MAKS_NAMA_CEPAT = 15;
@@ -64,6 +167,7 @@ function updForm() {
   $("#jenis-tebakan").textContent = jenisValid(pilihan) && pilihan !== auto ? `Auto-nya sih ${labelJenis(auto)}, tapi kamu pilih ${labelJenis(pilihan)}.` : "";
   $("#form").style.setProperty("--note", kertasBg(getRadio("warna")));
   renderNamaCepat();
+  updTagihan();
 }
 function formError(msg, el) {
   const p = $("#form-error");
@@ -87,6 +191,10 @@ function bukaForm(mode, id) {
   $("#rows").replaceChildren();
   if (d) for (const l of baris(d)) tambahBaris(l);
   if (!$("#rows").children.length) tambahBaris();
+  $("#biaya-rows").replaceChildren();
+  for (const b of daftarBiaya(d)) tambahBiaya({ ...b, mode: b.persen ? "persen" : b.bagi });
+  $("#f-harga-pembeli").value = d && angka(d.hargaPembeli) ? String(d.hargaPembeli) : "";
+  $("#f-bulat").value = String(bulatanCatatan(d));
   $("#tf-rows").replaceChildren();
   for (const r of rekening(d)) tambahRekening(r);
   if (!$("#tf-rows").children.length) tambahRekening();
@@ -132,10 +240,20 @@ async function simpanForm(ev) {
     if (!r.jenis && !r.nomor) return formError("Transfer ke mana? Isi bank/e-wallet atau nomornya dulu ya.", $(".t-jenis", row));
     transfer.push(r);
   }
+  const by = bacaBiayaForm();
+  if (by.err) return formError(by.err[0], by.err[1]);
+  const hpTeks = $("#f-harga-pembeli").value, hp = parseNominal(hpTeks);
+  if (by.list.length && Number.isNaN(hp)) return formError(`Harga pesanan yang beli “${hpTeks.trim()}” gak kebaca. Coba tulis 25000 atau 25k.`, $("#f-harga-pembeli"));
   const isi = {
     tanggal, waktu: getRadio("waktu"), beli, jenis: jenisValid($("#f-jenis").value) ? $("#f-jenis").value : "",
     pembeli, warna: getRadio("warna") || "kuning", orang,
   };
+  if (by.list.length) {
+    isi.biaya = by.list;
+    if (hp > 0) isi.hargaPembeli = hp;
+    const bl = Number($("#f-bulat").value);
+    if (bl !== 100 && BULATAN.includes(bl)) isi.bulat = bl;
+  }
   if (transfer.length) isi.transfer = transfer.slice(0, MAKS_REKENING);
   const now = Date.now();
   const btn = $("#btn-simpan");
@@ -149,7 +267,7 @@ async function simpanForm(ev) {
       // Orang yang ikut nitip pas form ini lagi kebuka jangan sampai ilang.
       for (const l of baris(lama.data)) {
         if (!S.form.asal.has(l.id) && !orang[l.id] && !seen.has(kunci(l.nama)))
-          orang[l.id] = { nama: l.nama, pesanan: l.pesanan, jumlah: l.jumlah, lunas: l.lunas, urut: ++urut };
+          orang[l.id] = { nama: l.nama, pesanan: l.pesanan, jumlah: l.harga, lunas: l.lunas, urut: ++urut };
       }
       const beda = bedaCatatan(lama.data, isi);
       const body = { ...isi, dibuat: Number(lama.data.dibuat) || now, diubah: now, riwayat: riwayatPlus(lama.data, beda ? `ngedit: ${beda}` : "") };
@@ -214,7 +332,7 @@ function fokusDi(id, fk) {
 function mulaiEditNom(id, lineId) {
   const l = cariBaris(id, lineId);
   if (!l || !bolehNulis()) return;
-  S.editing = { id, lineId, value: l.jumlah == null ? "" : String(l.jumlah) };
+  S.editing = { id, lineId, value: l.harga == null ? "" : String(l.harga) }; // yang diedit harga, tagihan dihitung ulang
   S.fokus = { id, fk: "nom:" + lineId };
   renderPapan();
 }
@@ -236,12 +354,12 @@ function simpanNom(dariBlur) {
   const l = cariBaris(ed.id, ed.lineId);
   S.fokus = dariBlur ? null : { id: ed.id, fk: "isi:" + ed.lineId };
   renderPapan();
-  if (!l || j === l.jumlah) return;
+  if (!l || j === l.harga) return;
   const p = "orang." + ed.lineId + ".";
   const paths = { [p + "jumlah"]: j, diubah: Date.now() };
   if (j == null || j === 0) paths[p + "lunas"] = false;
   tambahRiwayat(paths, cariDoc(ed.id).data, j == null ? `ngosongin nominal ${l.nama}` : j === 0 ? `nandain ${l.nama} ditraktir`
-    : `${l.jumlah == null ? "ngisi" : "ganti"} nominal ${l.nama}: ${rp(j)}`);
+    : `${l.harga == null ? "ngisi" : "ganti"} nominal ${l.nama}: ${rp(j)}`);
   aman(ed.id, () => S.store.update(ed.id, paths),
     j == null ? `Nominal ${l.nama} dikosongin` : j === 0 ? `${l.nama} ditraktir, asik!` : `Nominal ${l.nama} jadi ${rp(j)}`);
 }
@@ -459,13 +577,40 @@ function pasangEvent() {
   $("#btn-tambah-baris").addEventListener("click", () => { $(".r-nama", tambahBaris()).focus(); });
   $("#rows").addEventListener("input", (e) => {
     const t = e.target;
-    if (t.classList.contains("r-nom")) {
-      const pv = previewNominal(t.value), out = $(".r-preview", t.parentElement);
-      out.textContent = pv.text; out.classList.toggle("err", pv.err);
-    } else if (t.classList.contains("r-pesan")) updForm();
-    else if (t.classList.contains("r-nama")) renderNamaCepat();
+    if (t.classList.contains("r-pesan")) { updForm(); return; }
+    if (t.classList.contains("r-nama")) renderNamaCepat();
+    updTagihan();
   });
-  $("#f-pembeli").addEventListener("input", renderNamaCepat);
+  $("#f-pembeli").addEventListener("input", () => { renderNamaCepat(); updTagihan(); });
+  // Biaya tambahan: tombol "+ Ongkir" dkk, tanda +/−, hapus
+  $("#biaya").addEventListener("click", (e) => {
+    const t = e.target, preset = t.closest("[data-biaya]");
+    if (preset) {
+      if ($("#biaya-rows").children.length >= MAKS_BIAYA) { toast(`Biaya tambahan maksimal ${MAKS_BIAYA} ya.`); return; }
+      const p = PRESET_BIAYA[preset.dataset.biaya] || PRESET_BIAYA.lain;
+      const row = tambahBiaya(p);
+      updTagihan();
+      const f = $(p.nama ? ".b-nilai" : ".b-nama", row);
+      f.focus(); f.select();
+      return;
+    }
+    const row = t.closest(".b-row"); if (!row) return;
+    if (t.closest(".b-tanda")) { row.dataset.kurang = row.dataset.kurang === "1" ? "0" : "1"; tandaBiaya(row); updTagihan(); }
+    else if (t.closest(".r-hapus")) {
+      const next = row.nextElementSibling || row.previousElementSibling;
+      row.remove();
+      updTagihan();
+      (next ? $(".b-nilai", next) : $("#biaya [data-biaya]")).focus();
+    }
+  });
+  $("#biaya").addEventListener("input", (e) => {
+    const t = e.target, row = t.closest(".b-row");
+    // Ngetik "11%" langsung jadi mode persen
+    if (row && t.classList.contains("b-nilai") && /%\s*$/.test(t.value) && $(".b-mode", row).value !== "persen") $(".b-mode", row).value = "persen";
+    if (row) tandaBiaya(row);
+    updTagihan();
+  });
+  $("#biaya").addEventListener("change", updTagihan);
   $("#nama-cepat-list").addEventListener("click", (e) => {
     const b = e.target.closest("[data-nama]"); if (!b) return;
     const i = [...b.parentElement.children].indexOf(b), pakaiKeyboard = b.matches(":focus-visible");
