@@ -100,8 +100,7 @@ function docDariForm() {
     const j = parseNominal(nom);
     orang[row.dataset.id] = { nama: nama || "?", jumlah: Number.isNaN(j) ? null : j };
   }
-  const hp = parseNominal($("#f-harga-pembeli").value);
-  return { pembeli: $("#f-pembeli").value, orang, biaya: bacaBiayaForm().list, hargaPembeli: Number.isNaN(hp) ? null : hp, bulat: Number($("#f-bulat").value) };
+  return { pembeli: $("#f-pembeli").value, orang, biaya: bacaBiayaForm().list, bulat: Number($("#f-bulat").value) };
 }
 /* Hitung ulang tagihan di form: "= Rp22.000 → Rp21.700" di tiap orang, plus ringkasannya. */
 function updTagihan() {
@@ -116,22 +115,17 @@ function updTagihan() {
     const teks = $(".b-nilai", row).value, persen = $(".b-mode", row).value === "persen", out = $(".b-preview", row);
     const v = persen ? parsePersen(teks) : parseNominal(teks);
     out.classList.toggle("err", Number.isNaN(v));
-    out.textContent = v == null ? "" : Number.isNaN(v) ? "nggak kebaca" : persen ? `${String(v).replace(".", ",")}%` + (tg && tg.dasar ? ` = ${rp((tg.dasar * v) / 100)}` : "") : "= " + rp(v);
+    out.textContent = v == null ? "" : Number.isNaN(v) ? "nggak kebaca" : persen ? `${String(v).replace(".", ",")}%` + (tg && tg.subtotal ? ` = ${rp((tg.subtotal * v) / 100)}` : "") : "= " + rp(v);
   }
   const ada = $("#biaya-rows").children.length > 0;
   $("#biaya-opsi").hidden = !ada;
-  const hpv = previewNominal($("#f-harga-pembeli").value), hpOut = $("#harga-pembeli-pv");
-  hpOut.textContent = hpv.text === "= ditraktir" ? "" : hpv.text;
-  hpOut.classList.toggle("err", hpv.err);
   const ket = $("#biaya-ringkas");
   if (!ada || !tg) ket.textContent = ada ? "Isi nominal biayanya, ntar kebagi otomatis ke yang nitip." : "";
   else if (tg.tunggu) ket.textContent = "Biayanya kebagi otomatis setelah semua nominal yang nitip keisi.";
   else if (!tg.tagihan.size) ket.textContent = "Isi nominal yang nitip dulu, ntar biayanya kebagi otomatis.";
   else {
     const total = [...tg.tagihan.values()].reduce((s, x) => s + x, 0);
-    ket.textContent = `Harga pesanan ${rp(tg.subtotal)} → total ditagih ${rp(total)}` + (tg.hp > 0
-      ? `, yang beli nanggung ${rp(tg.bagianPembeli)}.`
-      : ". Yang beli juga pesen? Isi harga pesanannya biar ongkir dkk ikut kebagi ke dia.");
+    ket.textContent = `Harga pesanan ${rp(tg.subtotal)} → total ditagih ${rp(total)}.`;
   }
 }
 /* Nama yang pernah ada di catatan lain (paling sering duluan): tinggal pencet, langsung masuk daftar yang nitip.
@@ -193,7 +187,6 @@ function bukaForm(mode, id) {
   if (!$("#rows").children.length) tambahBaris();
   $("#biaya-rows").replaceChildren();
   for (const b of daftarBiaya(d)) tambahBiaya({ ...b, mode: b.persen ? "persen" : b.bagi });
-  $("#f-harga-pembeli").value = d && angka(d.hargaPembeli) ? String(d.hargaPembeli) : "";
   $("#f-bulat").value = String(bulatanCatatan(d));
   $("#tf-rows").replaceChildren();
   for (const r of rekening(d)) tambahRekening(r);
@@ -242,15 +235,12 @@ async function simpanForm(ev) {
   }
   const by = bacaBiayaForm();
   if (by.err) return formError(by.err[0], by.err[1]);
-  const hpTeks = $("#f-harga-pembeli").value, hp = parseNominal(hpTeks);
-  if (by.list.length && Number.isNaN(hp)) return formError(`Harga pesanan yang beli “${hpTeks.trim()}” gak kebaca. Coba tulis 25000 atau 25k.`, $("#f-harga-pembeli"));
   const isi = {
     tanggal, waktu: getRadio("waktu"), beli, jenis: jenisValid($("#f-jenis").value) ? $("#f-jenis").value : "",
     pembeli, warna: getRadio("warna") || "kuning", orang,
   };
   if (by.list.length) {
     isi.biaya = by.list;
-    if (hp > 0) isi.hargaPembeli = hp;
     const bl = Number($("#f-bulat").value);
     if (bl !== 100 && BULATAN.includes(bl)) isi.bulat = bl;
   }
