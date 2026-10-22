@@ -198,7 +198,9 @@ function buildNote(n) {
     note.append(h("dl", { class: "n-total" + (tg ? " ada-biaya" : "") }, ...rinci,
       h("div", { class: "total" }, h("dt", null, "Total"), h("dd", null, s.total === 0 && s.pending ? "belum diitung" : rp(s.total) + (s.pending ? " + ?" : ""))),
       h("div", { class: "nyangkut" }, h("dt", null, "Masih nyangkut"), h("dd", null, s.nyangkut > 0 ? h("mark", null, rp(s.nyangkut)) : rp(0)))));
-    if (tg && tg.tunggu) note.append(h("p", { class: "n-biaya-ket" }, "Ongkir, pajak & diskon kebagi setelah semua nominal keisi."));
+    if (tg && (tg.tunggu || tg.hp > 0)) note.append(h("p", { class: "n-biaya-ket" }, tg.tunggu
+      ? "Ongkir, pajak & diskon kebagi setelah semua nominal keisi."
+      : `Ikut dibagi juga ke yang beli (pesanannya sendiri ${rp(tg.hp)}).`));
   }
   const stTeks = { kosong: "Nunggu yang mau nitip", pending: `${s.pending} orang belum diitung`, owe: `Nunggu ${s.orangNyangkut} orang transfer`, paid: "Lunas semua, mantul!" }[s.st];
   const foot = h("footer", { class: "n-foot" }, h("span", { class: "n-state st-" + s.st }, stTeks));

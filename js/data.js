@@ -42,8 +42,8 @@ function baris(d) {
 }
 
 /* ---------- biaya tambahan: ongkir, PPN, diskon, dll ----------
-   Cuma dibagi ke yang nitip (pesanan yang beli sendiri nggak diitung). Persen & "sesuai harga" dibagi sebanding
-   harga pesanan, "rata" dibagi sama rata per orang. Tagihan dibulatin ke atas (default Rp100).
+   Persen & "sesuai harga" dibagi sebanding harga pesanan, "rata" dibagi sama rata per orang.
+   Kalau pesanan yang beli sendiri diisi, dia ikut kebagian juga (biar cocok sama nota). Tagihan dibulatin ke atas (default Rp100).
    Selama masih ada yang nominalnya kosong, biaya belum dibagi (bagiannya tergantung semua harga). */
 const MAKS_BIAYA = 8;
 const BULATAN = [100, 500, 1000, 1];
@@ -62,19 +62,21 @@ function hitungTagihan(d) {
   if (!biaya.length) return null;
   const o = d.orang && typeof d.orang === "object" && !Array.isArray(d.orang) ? d.orang : {};
   const pk = kunci(d.pembeli), ikut = [];
-  let tunggu = false;
+  let hp = angka(d.hargaPembeli) || 0, tunggu = false;
   for (const [id, v] of Object.entries(o)) {
-    if (!v || typeof v !== "object" || !rapikan(v.nama) || kunci(v.nama) === pk) continue; // punya yang beli sendiri nggak diitung
+    if (!v || typeof v !== "object" || !rapikan(v.nama)) continue;
     const h = angka(v.jumlah);
+    if (kunci(v.nama) === pk) { hp += h || 0; continue; } // "punya sendiri" = pesanan yang beli
     if (h == null) tunggu = true;
     else if (h > 0) ikut.push([id, h]); // 0 = ditraktir, nggak ikut nanggung
   }
-  const subtotal = ikut.reduce((s, [, h]) => s + h, 0), n = ikut.length;
-  const rinci = biaya.map((b) => ({ ...b, rp: b.persen ? (subtotal * b.nilai) / 100 : b.nilai }));
-  const out = { biaya: rinci, subtotal, tunggu, unit: bulatanCatatan(d), tagihan: new Map() };
+  const subtotal = ikut.reduce((s, [, h]) => s + h, 0), dasar = subtotal + hp, n = ikut.length + (hp > 0 ? 1 : 0);
+  const rinci = biaya.map((b) => ({ ...b, rp: b.persen ? (dasar * b.nilai) / 100 : b.nilai }));
+  const out = { biaya: rinci, subtotal, hp, dasar, tunggu, unit: bulatanCatatan(d), tagihan: new Map(), bagianPembeli: hp };
   if (tunggu || !subtotal) return out;
-  const bagian = (h) => rinci.reduce((s, b) => s + (b.kurang ? -1 : 1) * (b.persen || b.bagi === "harga" ? (b.rp * h) / subtotal : b.rp / n), 0);
+  const bagian = (h) => rinci.reduce((s, b) => s + (b.kurang ? -1 : 1) * (b.persen || b.bagi === "harga" ? (b.rp * h) / dasar : b.rp / n), 0);
   for (const [id, h] of ikut) out.tagihan.set(id, Math.ceil(Math.max(0, Math.round(h + bagian(h))) / out.unit) * out.unit);
+  if (hp > 0) out.bagianPembeli = Math.max(0, Math.round(hp + bagian(hp)));
   return out;
 }
 /* Buat pesan reminder: "Udah termasuk Ongkir, PPN, Diskon." */
@@ -240,7 +242,7 @@ function bedaCatatan(lama, baru) {
     if (o.lunas !== !!l.lunas) out.push(l.lunas ? `${l.nama} lunas` : `${l.nama} batal lunas`);
   }
   for (const [k, o] of L) if (!B.has(k)) out.push(`hapus ${o.nama}`);
-  const sigBiaya = (d) => JSON.stringify([daftarBiaya(d), bulatanCatatan(d)]);
+  const sigBiaya = (d) => JSON.stringify([daftarBiaya(d), angka(d.hargaPembeli) || 0, bulatanCatatan(d)]);
   if (sigBiaya(lama) !== sigBiaya(baru)) {
     const bl = daftarBiaya(lama), bb = daftarBiaya(baru);
     out.push(!bl.length ? `nambah ${bb.map((b) => b.nama).join(", ")}` : !bb.length ? "hapus biaya tambahan" : "ganti biaya tambahan");

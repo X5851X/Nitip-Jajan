@@ -168,14 +168,22 @@
             <button type="button" class="btn ghost small" data-biaya="diskon">− Diskon</button>
             <button type="button" class="btn ghost small" data-biaya="lain">+ Biaya lain</button>
           </div>
-          <label class="biaya-bulat" id="biaya-opsi" hidden>Bulatin ke atas
-            <select id="f-bulat">
-              <option value="100">Rp100</option>
-              <option value="500">Rp500</option>
-              <option value="1000">Rp1.000</option>
-              <option value="1">Nggak usah</option>
-            </select>
-          </label>
+          <div class="biaya-opsi" id="biaya-opsi" hidden>
+            <div class="biaya-inline">
+              <label for="f-harga-pembeli">Pesanan yang beli sendiri</label>
+              <input id="f-harga-pembeli" type="text" inputmode="decimal" autocomplete="off" placeholder="opsional">
+              <span class="r-preview" id="harga-pembeli-pv"></span>
+            </div>
+            <div class="biaya-inline">
+              <label for="f-bulat">Bulatin ke atas</label>
+              <select id="f-bulat">
+                <option value="100">Rp100</option>
+                <option value="500">Rp500</option>
+                <option value="1000">Rp1.000</option>
+                <option value="1">Nggak usah</option>
+              </select>
+            </div>
+          </div>
           <p class="hint" id="biaya-ringkas"></p>
         </div>
       </div>
