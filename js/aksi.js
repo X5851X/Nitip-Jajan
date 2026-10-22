@@ -44,7 +44,7 @@ const PRESET_BIAYA = {
 function tambahBiaya(b = {}) {
   const row = h("div", { class: "b-row", "data-kurang": b.kurang ? "1" : "0" },
     h("button", { type: "button", class: "b-tanda", title: "Pencet buat ganti: nambah atau ngurangin" }, b.kurang ? "−" : "+"),
-    h("input", { class: "b-nama", type: "text", maxlength: "30", autocomplete: "off", placeholder: b.kurang ? "misal: voucher" : "misal: biaya layanan", "aria-label": "Nama biaya", value: b.nama || "" }),
+    h("input", { class: "b-nama", type: "text", maxlength: "40", autocomplete: "off", placeholder: b.kurang ? "misal: voucher" : "misal: biaya layanan", "aria-label": "Nama biaya", value: b.nama || "" }),
     h("div", { class: "b-nilai-wrap" },
       h("input", { class: "b-nilai", type: "text", inputmode: "decimal", autocomplete: "off", "aria-label": "Nominal atau persen", value: b.nilai == null ? "" : String(b.nilai).replace(".", ",") }),
       h("span", { class: "r-preview b-preview" })),
@@ -78,7 +78,7 @@ function bacaBiayaForm() {
   const list = [];
   let err = null;
   for (const row of $("#biaya-rows").children) {
-    const nama = rapikan($(".b-nama", row).value).slice(0, 30), iNilai = $(".b-nilai", row), teks = iNilai.value.trim();
+    const nama = rapikan($(".b-nama", row).value).slice(0, 40), iNilai = $(".b-nilai", row), teks = iNilai.value.trim();
     const mode = $(".b-mode", row).value, kurang = row.dataset.kurang === "1", persen = mode === "persen";
     if (!nama && !teks) continue;
     const nilai = persen ? parsePersen(teks) : parseNominal(teks);
@@ -128,8 +128,10 @@ function updTagihan() {
   else if (tg.tunggu) ket.textContent = "Biayanya kebagi otomatis setelah semua nominal yang nitip keisi.";
   else if (!tg.tagihan.size) ket.textContent = "Isi nominal yang nitip dulu, ntar biayanya kebagi otomatis.";
   else {
-    const total = [...tg.tagihan.values()].reduce((s, x) => s + x, 0);
-    ket.textContent = `Harga pesanan ${rp(tg.subtotal)} → total ditagih ${rp(total)}` + (tg.hp > 0 ? `, yang beli nanggung ${rp(tg.bagianPembeli)}.` : ".");
+    const lebih = tg.ditagih - tg.nota;
+    ket.textContent = `Harga pesanan ${rp(tg.subtotal)} → total ditagih ${rp(tg.ditagih)}` + (tg.hp > 0
+      ? `, yang beli nanggung ${rp(tg.bagianPembeli)}. Total bayar ${rp(tg.nota)} (${rp(tg.ditagih)} + ${rp(tg.bagianPembeli)}).`
+      : `. Total bayar ${rp(tg.nota)}` + (tg.unit > 1 && lebih > 0 ? ` (yang ditagih lebih ${rp(lebih)} karena dibulatin).` : "."));
   }
 }
 /* Nama yang pernah ada di catatan lain (paling sering duluan): tinggal pencet, langsung masuk daftar yang nitip.

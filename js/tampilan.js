@@ -188,19 +188,25 @@ function buildNote(n) {
     : h("button", { type: "button", class: "n-ikut", "data-act": "ikut", "data-fk": "ikut" }, "+ Aku nitip juga ya!"));
   const tg = hitungTagihan(data);
   if (s.ls.length) {
-    // Ada ongkir/PPN/diskon: rinciannya ditulis di atas total
+    // Ada ongkir/PPN/diskon: rinciannya kayak struk mini. Total bayar = nota; dikurangin bagian yang beli
+    // (atau ditambah lebihan pembulatan) = total yang ditagih ke yang nitip.
+    const siap = tg && !tg.tunggu && tg.tagihan.size > 0;
+    const lebih = siap ? tg.ditagih - tg.nota : 0;
+    const pakaiNota = siap && (tg.hp > 0 || (tg.unit > 1 && lebih > 0));
+    const brs = (dt, dd, cls = "rinci") => h("div", { class: cls }, h("dt", null, dt), h("dd", null, dd));
     const rinci = !tg ? [] : [
-      h("div", { class: "rinci" }, h("dt", null, "Harga pesanan"), h("dd", null, rp(tg.subtotal) + (tg.tunggu ? " + ?" : ""))),
-      ...tg.biaya.map((b) => h("div", { class: "rinci" },
-        h("dt", null, `${b.kurang ? "−" : "+"} ${b.nama}` + (b.persen ? ` ${String(b.nilai).replace(".", ",")}%` : b.bagi === "rata" ? " (bagi rata)" : "")),
-        h("dd", null, b.persen && tg.tunggu ? "?" : (b.kurang ? "−" : "") + rp(b.rp)))),
-    ];
+      brs(tg.hp > 0 ? "Pesanan yang nitip" : "Harga pesanan", rp(tg.subtotal) + (tg.tunggu ? " + ?" : "")),
+      tg.hp > 0 ? brs("Pesanan yang beli", rp(tg.hp)) : null,
+      ...tg.biaya.map((b) => brs(`${b.kurang ? "−" : "+"} ${b.nama}` + (b.persen ? ` ${String(b.nilai).replace(".", ",")}%` : b.bagi === "rata" ? " (bagi rata)" : ""),
+        b.persen && tg.tunggu ? "?" : (b.kurang ? "−" : "") + rp(b.rp))),
+      pakaiNota ? brs("Total bayar", rp(tg.nota), "rinci total-bayar") : null,
+      pakaiNota && tg.hp > 0 ? brs("− Bagian yang beli", "−" + rp(tg.bagianPembeli)) : null,
+      pakaiNota && !(tg.hp > 0) ? brs("+ Lebihan pembulatan", rp(lebih)) : null,
+    ].filter(Boolean);
     note.append(h("dl", { class: "n-total" + (tg ? " ada-biaya" : "") }, ...rinci,
-      h("div", { class: "total" }, h("dt", null, "Total"), h("dd", null, s.total === 0 && s.pending ? "belum diitung" : rp(s.total) + (s.pending ? " + ?" : ""))),
+      h("div", { class: "total" }, h("dt", null, pakaiNota ? "Total ditagih" : "Total"), h("dd", null, s.total === 0 && s.pending ? "belum diitung" : rp(s.total) + (s.pending ? " + ?" : ""))),
       h("div", { class: "nyangkut" }, h("dt", null, "Masih nyangkut"), h("dd", null, s.nyangkut > 0 ? h("mark", null, rp(s.nyangkut)) : rp(0)))));
-    if (tg && (tg.tunggu || tg.hp > 0)) note.append(h("p", { class: "n-biaya-ket" }, tg.tunggu
-      ? "Ongkir, pajak & diskon kebagi setelah semua nominal keisi."
-      : `Ikut dibagi juga ke yang beli (pesanannya sendiri ${rp(tg.hp)}).`));
+    if (tg && tg.tunggu) note.append(h("p", { class: "n-biaya-ket" }, "Ongkir, pajak & diskon kebagi setelah semua nominal keisi."));
   }
   const stTeks = { kosong: "Nunggu yang mau nitip", pending: `${s.pending} orang belum diitung`, owe: `Nunggu ${s.orangNyangkut} orang transfer`, paid: "Lunas semua, mantul!" }[s.st];
   const foot = h("footer", { class: "n-foot" }, h("span", { class: "n-state st-" + s.st }, stTeks));

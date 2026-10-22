@@ -101,7 +101,7 @@ function cekCatatan(d) {
     if (!Array.isArray(d.biaya) || d.biaya.length > 8) return "Biaya tambahan maksimal 8";
     const bool = (x) => typeof x === "boolean";
     for (const b of d.biaya) {
-      if (!peta(b) || !kunciAman(b, KUNCI_BIAYA) || !boleh(b.nama, (x) => teks(x, 0, 30)) || !angka(b.nilai) || b.nilai < 0 || b.nilai > 1e9
+      if (!peta(b) || !kunciAman(b, KUNCI_BIAYA) || !boleh(b.nama, (x) => teks(x, 0, 40)) || !angka(b.nilai) || b.nilai < 0 || b.nilai > 1e9
         || !boleh(b.persen, bool) || !boleh(b.kurang, bool) || !boleh(b.bagi, (x) => x === "rata" || x === "harga")) return "Biaya tambahannya nggak valid";
     }
   }

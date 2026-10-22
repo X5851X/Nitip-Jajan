@@ -52,7 +52,7 @@ function daftarBiaya(d) {
   return a.filter((b) => b && typeof b === "object" && angka(b.nilai) > 0)
     .slice(0, MAKS_BIAYA)
     .map((b) => ({
-      nama: rapikan(b.nama).slice(0, 30) || (b.kurang === true ? "Potongan" : "Biaya lain"),
+      nama: rapikan(b.nama).slice(0, 40) || (b.kurang === true ? "Potongan" : "Biaya lain"),
       nilai: b.nilai, persen: b.persen === true, kurang: b.kurang === true, bagi: b.bagi === "rata" ? "rata" : "harga",
     }));
 }
@@ -76,7 +76,10 @@ function hitungTagihan(d) {
   if (tunggu || !subtotal) return out;
   const bagian = (h) => rinci.reduce((s, b) => s + (b.kurang ? -1 : 1) * (b.persen || b.bagi === "harga" ? (b.rp * h) / dasar : b.rp / n), 0);
   for (const [id, h] of ikut) out.tagihan.set(id, Math.ceil(Math.max(0, Math.round(h + bagian(h))) / out.unit) * out.unit);
-  if (hp > 0) out.bagianPembeli = Math.max(0, Math.round(hp + bagian(hp)));
+  // Total bayar = total di nota. Bagian yang beli = nota − yang ditagih, jadi selalu pas: ditagih + bagian yang beli = total bayar.
+  out.nota = Math.max(0, Math.round(dasar + rinci.reduce((s, b) => s + (b.kurang ? -1 : 1) * b.rp, 0)));
+  out.ditagih = [...out.tagihan.values()].reduce((s, x) => s + x, 0);
+  if (hp > 0) out.bagianPembeli = Math.max(0, out.nota - out.ditagih);
   return out;
 }
 /* Buat pesan reminder: "Udah termasuk Ongkir, PPN, Diskon." */

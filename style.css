@@ -251,6 +251,8 @@ button.kal-sel:hover{border-color:var(--accent)}
 /* Rincian ongkir/PPN/diskon di atas total */
 .n-total .rinci dt,.n-total .rinci dd{font-size:12.5px;color:var(--ink-soft);font-weight:500}
 .n-total.ada-biaya .total{border-top:1px dashed var(--rule);padding-top:4px;margin-top:2px}
+.n-total .rinci.total-bayar{border-top:1px dashed var(--rule);padding-top:4px;margin-top:2px}
+.n-total .rinci.total-bayar dt,.n-total .rinci.total-bayar dd{color:var(--ink);font-weight:600}
 .n-biaya-ket{margin:-4px 0 0;font-size:11.5px;color:var(--ink-soft)}
 .n-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
 .n-state{font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;background:rgb(255 255 255 / .55)}
