@@ -299,6 +299,7 @@ function renderPapan() {
   $("#papan-judul").textContent = tglPanjang(tgl);
   $("#papan-sub").textContent = [u, S.loaded ? (notes.length ? `${notes.length} catatan` : "belum ada catatan") : "", nFoto ? `${nFoto} foto` : ""].filter(Boolean).join(" · ");
   $("#btn-baru").hidden = !bolehNulis();
+  $("#btn-foto").hidden = !(S.store && S.store.foto) || !bolehNulis(); // foto cuma ada di mode server
 
   const papan = $("#papan");
   const act = document.activeElement;

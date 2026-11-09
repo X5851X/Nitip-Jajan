@@ -796,6 +796,7 @@ function pasangEvent() {
 
   // Form catatan baru / edit
   $("#btn-baru").addEventListener("click", () => bukaForm("baru"));
+  $("#btn-foto").addEventListener("click", () => { if (bisaTempelFoto()) $("#foto-file").click(); });
   $("#btn-batal").addEventListener("click", tutupForm);
   $("#btn-x").addEventListener("click", tutupForm);
   // Klik di luar sticky note (latar gelap) = gak jadi. Cuma kalau klik-nya mulai & selesai di luar,
