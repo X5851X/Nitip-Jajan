@@ -746,11 +746,10 @@ function pasangEvent() {
       renderRekap();
     }
   });
-  // Foto di papan: tombol tempel, seret file ke papan, atau tempel dari clipboard
+  // Foto di papan: klik buat lihat gede; nempelnya lewat tombol, seret file ke papan, atau tempel dari clipboard
   $("#papan-foto").addEventListener("click", (e) => {
     const f = e.target.closest("[data-foto]");
     if (f) bukaFoto(f.dataset.foto);
-    else if (e.target.closest("#foto-tambah")) $("#foto-file").click();
   });
   $("#foto-file").addEventListener("change", (e) => {
     const files = [...e.target.files];

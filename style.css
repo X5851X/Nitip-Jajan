@@ -210,11 +210,7 @@ button.polaroid:hover,button.polaroid:focus-visible{transform:translateY(calc(va
 .polaroid.naik img{filter:brightness(.25) sepia(1) blur(3px)}
 .polaroid.cuci img{animation:cuci 1.6s ease-out both}
 @keyframes cuci{from{filter:brightness(.25) sepia(1) blur(3px)}to{filter:none}}
-.polaroid.tambah{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:150px;padding:10px;background:rgb(255 253 248 / .55);border:2px dashed rgb(70 45 25 / .5);border-radius:4px;box-shadow:none;cursor:pointer;font-family:var(--f-hand);font-size:18px;line-height:1.1;text-align:center;--rot:-2deg}
-.polaroid.tambah::before{display:none}
-.polaroid.tambah:hover,.polaroid.tambah:focus-visible{background:#FFFEFA;box-shadow:0 10px 18px -6px rgb(70 45 25 / .4)}
-.polaroid.tambah svg{display:block}
-@media (max-width:600px){.papan-foto{gap:20px 14px}.polaroid{width:112px}.polaroid.tambah{min-height:128px}}
+@media (max-width:600px){.papan-foto{gap:20px 14px}.polaroid{width:112px}}
 /* foto gede */
 .dlg-foto{border:0;padding:0;background:transparent;width:min(560px,calc(100% - 24px));max-width:none;max-height:calc(100% - 24px);overflow:visible;color:#2E211B}
 .dlg-foto::backdrop{background:rgb(23 15 12 / .72)}

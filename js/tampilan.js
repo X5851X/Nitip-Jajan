@@ -325,10 +325,8 @@ function renderPapan() {
 
 /* ---------- foto di papan: polaroid yang ditempel pakai paku payung ---------- */
 const WARNA_PIN = ["#C0392B", "#A8693A", "#D9A21B", "#5A3517", "#D2691E"];
-const IKON_KAMERA = '<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l1.6-2.4h6.800L17 8h3a1.500 1.500 0 0 1 1.500 1.500V18a1.500 1.500 0 0 1-1.500 1.500H4A1.500 1.500 0 0 1 2.500 18V9.500A1.500 1.500 0 0 1 4 8z"/><circle cx="12" cy="13.500" r="3.500"/></svg>';
 const gayaPolaroid = (id) => { const x = hashStr(id); return `--rot:${(x % 11) - 5}deg;--turun:${(x % 3) * 5}px;--pin:${WARNA_PIN[x % WARNA_PIN.length]}`; };
 const fotoCache = new Map();
-let fotoTambahEl = null;
 function polaroid(f) {
   const ket = f.data.ket || "";
   let c = fotoCache.get(f.id);
@@ -356,11 +354,6 @@ function renderFoto() {
   for (const n of naik) els.push(h("div", { class: "polaroid naik", style: gayaPolaroid(n.id), role: "status", "aria-label": "Fotonya lagi ditempel" },
     n.url ? h("img", { src: n.url, alt: "" }) : h("span", { class: "foto-kosong" }),
     h("span", { class: "polaroid-ket" }, "lagi nyuci foto…")));
-  if (bolehNulis() && foto.length + naik.length < MAKS_FOTO_TANGGAL) {
-    if (!fotoTambahEl) fotoTambahEl = h("button", { type: "button", class: "polaroid tambah", id: "foto-tambah", title: "Bisa juga seret foto ke papan, atau tempel pakai Ctrl+V" },
-      h("span", { html: IKON_KAMERA }), h("span", null, "Tempel foto"));
-    els.push(fotoTambahEl);
-  }
   reconcile(box, els);
   box.hidden = !els.length;
   const ada = new Set(S.foto.map((f) => f.id));
