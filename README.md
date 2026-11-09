@@ -17,6 +17,8 @@ Catatan titip jajan bareng dalam bentuk kalender dan sticky notes. Klik tanggal,
 - **Ongkir, PPN, diskon, dan biaya lain** bisa ditambahin di catatan. Tagihan tiap orang dihitung otomatis: persen dan diskon dibagi sesuai harga pesanan, ongkir dibagi rata (cara baginya bisa diganti). Kalau yang beli juga pesen, isi pesanannya biar dia ikut kebagian dan hitungannya cocok sama nota. Hasilnya dibulatin ke atas.
 - **"Aku nitip juga ya!"** buat nambahin nama sendiri ke catatan orang.
 - **Transfer ke mana:** yang beli bisa nulis sampai 3 rekening atau e-wallet (bebas, misal BCA atau DANA). Infonya tampil di sticky note dan ikut masuk ke pesan pengingat.
+- **Foto di papan:** tempel nota atau foto jajanan kayak polaroid di papan tanggalnya, bisa dikasih keterangan. Bisa juga seret file ke papan atau Ctrl+V. Fotonya dikecilin di browser dulu, dan fitur ini cuma jalan kalau pakai `worker.js`.
+- **Tombol ± buat bayar lebih atau kurang:** catat dibayar berapa. Kurangnya kebawa ke tagihan berikutnya, lebihnya jadi simpanan di yang beli dan otomatis kepotong ke jajan berikutnya.
 - **Tiket "Yang masih nyangkut":** rekap per jajanan kayak tiket bioskop, urut tanggal, bisa tandain lunas.
 - **Copas pengingat** buat ditempel di grup, lengkap sama link langsung ke catatannya.
 - **Riwayat** per catatan: siapa ngapain, kapan.

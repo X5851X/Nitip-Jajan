@@ -9,6 +9,7 @@ const S = {
   bulan: [hariIni.getFullYear(), hariIni.getMonth()],
   aku: lsGet("nitipdong.aku") || "",
   editing: null,   // {id, lineId, value}    : isi nominal langsung di note
+  bayar: null,     // {id, lineId, value}    : kotak ± "dibayar berapa" di note
   join: null,      // {id, nama, pesan, nom} : form "aku nitip juga"
   confirm: null,   // {kind:"hapus", id} | {kind:"lunasin", c, d}
   form: null,      // {mode:"baru"|"ubah", id, asal}
@@ -19,6 +20,11 @@ const S = {
   bukaCatatan: "",  // id catatan dari link (#tanggal/id) yang mau langsung disorot pas data masuk
   fokus: null,     // {id, fk}
   baruId: null, scrollTo: null, rebuilding: false, unsub: null,
+  foto: [],        // foto yang ditempel di papan: [{id, data}]
+  fotoNaik: [],    // foto yang lagi dikirim: [{id, tanggal, url, file}]
+  fotoLokal: new Map(), // id -> alamat sementara, biar foto yang baru dikirim nggak perlu diunduh lagi
+  fotoKenal: new Set(), fotoBaru: new Set(), // buat animasi foto "lagi jadi" pas baru nongol
+  fotoBuka: null,  // id foto yang lagi dibuka gede
 };
 const bolehNulis = () => !!S.store && !S.galat;
 function setAku(nama) { S.aku = rapikan(nama); lsSet("nitipdong.aku", S.aku); }
@@ -26,19 +32,132 @@ const cariDoc = (id) => S.docs.find((d) => d.id === id);
 
 /* Data bersama itu input orang lain: selalu dibaca hati-hati. */
 const angka = (v) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null);
-/* Baris yang nitip. `harga` = nominal yang diketik, `jumlah` = tagihan akhirnya (harga + bagian biaya tambahan). */
+/* Baris yang nitip. `harga` = nominal yang diketik, `jumlah` = tagihan akhirnya (harga + bagian biaya tambahan),
+   `sisa` = yang masih harus dibayar, `lunas` = udah beres (termasuk kalau ketutup kelebihan bayar di catatan lain).
+   `lunasAsli` & `bayar` = yang beneran kesimpen, buat ditulis balik. */
 function baris(d) {
   const o = d && d.orang && typeof d.orang === "object" && !Array.isArray(d.orang) ? d.orang : {};
   const ls = Object.entries(o)
     .filter(([, v]) => v && typeof v === "object" && rapikan(v.nama))
     .map(([id, v]) => ({
       id, nama: rapikan(v.nama).slice(0, 30), pesanan: rapikan(v.pesanan).slice(0, 80),
-      harga: angka(v.jumlah), jumlah: angka(v.jumlah), lunas: v.lunas === true, urut: Number(v.urut) || 0,
+      harga: angka(v.jumlah), jumlah: angka(v.jumlah), lunas: v.lunas === true, lunasAsli: v.lunas === true, bayar: angka(v.bayar), urut: Number(v.urut) || 0,
     }))
     .sort((a, b) => a.urut - b.urut || a.id.localeCompare(b.id));
   const tg = hitungTagihan(d);
   if (tg) for (const l of ls) if (tg.tagihan.has(l.id)) l.jumlah = tg.tagihan.get(l.id);
+  const buku = bukuBayar().perCatatan.get(d);
+  for (const l of ls) {
+    const b = buku && buku.get(l.id);
+    if (b) { l.masuk = b.masuk; l.ketutup = b.ketutup; l.sisa = b.sisa; l.kurangLalu = b.kurangLalu; l.simpanan = b.pasangan.simpanan; }
+    else { // bukan catatan di papan (form) atau punya yang beli sendiri
+      l.masuk = l.bayar != null ? l.bayar : l.lunasAsli && l.jumlah != null ? l.jumlah : 0;
+      l.ketutup = 0; l.kurangLalu = 0; l.simpanan = 0;
+      l.sisa = l.jumlah == null ? null : Math.max(0, l.jumlah - l.masuk);
+    }
+    if (l.jumlah > 0) l.lunas = l.sisa === 0;
+  }
   return ls;
+}
+
+/* ---------- buku bayar: kelebihan & kekurangan bayar ----------
+   Uang yang masuk (`bayar`, atau tanda lunas = pas sama tagihan) dicatat per baris, dan dihitung per pasangan yang nitip → yang beli.
+   Tiap baris makan uangnya sendiri dulu, lebihnya nutup kekurangan dari catatan paling lama, sisanya jadi simpanan di yang beli
+   dan otomatis kepotong ke tagihan berikutnya. Kalau nggak ada yang pakai `bayar`, hasilnya sama persis kayak tanda lunas biasa. */
+function bagiBayar(list) {
+  let lebih = 0;
+  for (const b of list) {
+    b.kebayar = b.tagihan == null ? 0 : Math.min(b.masuk, b.tagihan);
+    lebih += b.masuk - b.kebayar;
+  }
+  for (const b of list) {
+    if (b.tagihan == null) { b.ketutup = 0; b.sisa = null; continue; }
+    const kurang = b.tagihan - b.kebayar;
+    b.ketutup = Math.min(kurang, lebih);
+    lebih -= b.ketutup;
+    b.sisa = kurang - b.ketutup;
+  }
+  return lebih;
+}
+let bukuCache = null;
+function bukuBayar() {
+  if (bukuCache && bukuCache.docs === S.docs) return bukuCache;
+  const pasangan = new Map(), perCatatan = new WeakMap();
+  const urut = S.docs.slice().sort((a, b) => String(a.data.tanggal || "").localeCompare(String(b.data.tanggal || ""))
+    || urutWaktu(a.data.waktu) - urutWaktu(b.data.waktu) || (Number(a.data.dibuat) || 0) - (Number(b.data.dibuat) || 0));
+  for (const { id, data: d } of urut) {
+    const pb = rapikan(d.pembeli), pk = kunci(pb);
+    if (!pk) continue;
+    const o = d.orang && typeof d.orang === "object" && !Array.isArray(d.orang) ? d.orang : {};
+    const tg = hitungTagihan(d), m = new Map();
+    perCatatan.set(d, m);
+    for (const [lineId, v] of Object.entries(o)) {
+      if (!v || typeof v !== "object" || !rapikan(v.nama)) continue;
+      const dk = kunci(v.nama);
+      if (dk === pk) continue;
+      const harga = angka(v.jumlah), tagihan = tg && tg.tagihan.has(lineId) ? tg.tagihan.get(lineId) : harga, bayar = angka(v.bayar);
+      let p = pasangan.get(dk + "\u0000" + pk);
+      if (!p) { p = { key: dk, pk, nama: "", pembeli: "", baris: [], simpanan: 0 }; pasangan.set(dk + "\u0000" + pk, p); }
+      p.nama = rapikan(v.nama); p.pembeli = pb;
+      const b = { docId: id, lineId, tagihan, masuk: bayar != null ? bayar : v.lunas === true && tagihan != null ? tagihan : 0, pasangan: p };
+      p.baris.push(b);
+      m.set(lineId, b);
+    }
+  }
+  const simpanan = [];
+  for (const p of pasangan.values()) {
+    p.simpanan = bagiBayar(p.baris);
+    let lalu = 0;
+    for (const b of p.baris) {
+      b.kurangLalu = lalu;
+      if (b.masuk > 0 && b.sisa > 0) lalu += b.sisa; // kurangan dari yang udah sempat bayar sebagian
+    }
+    if (p.simpanan > 0) simpanan.push(p);
+  }
+  simpanan.sort((a, b) => b.simpanan - a.simpanan || a.nama.localeCompare(b.nama));
+  bukuCache = { docs: S.docs, perCatatan, simpanan };
+  return bukuCache;
+}
+/* Tampilan satu catatan juga tergantung catatan lain (kurangan & simpanan), jadi ikut jadi kunci cache-nya. */
+function sigBuku(d) {
+  const m = bukuBayar().perCatatan.get(d);
+  if (!m) return "";
+  let s = "";
+  for (const [id, b] of m) s += `${id}:${b.sisa},${b.ketutup},${b.kurangLalu},${b.pasangan.simpanan};`;
+  return s;
+}
+/* Kalau baris ini dibayar `x`, gimana hasilnya? Buat tulisan di kotak ±, sebelum disimpan. */
+function simulasiBayar(d, lineId, x) {
+  const m = bukuBayar().perCatatan.get(d), asli = m && m.get(lineId);
+  if (!asli) return null;
+  const p = asli.pasangan, i = p.baris.indexOf(asli);
+  const list = p.baris.map((b) => ({ tagihan: b.tagihan, masuk: b === asli ? x : b.masuk }));
+  const simpanan = bagiBayar(list);
+  const lalu = list.slice(0, i).reduce((s, b) => s + (b.masuk > 0 && b.sisa > 0 ? b.sisa : 0), 0);
+  return { simpanan, ini: list[i], lalu, pembeli: p.pembeli };
+}
+function teksHarusBayar(d, lineId) {
+  const s = simulasiBayar(d, lineId, 0);
+  if (!s) return "";
+  const harus = s.ini.sisa + s.lalu;
+  if (s.lalu > 0) return `Harusnya ${rp(harus)}: ${rp(s.ini.sisa)} + kurangan sebelumnya ${rp(s.lalu)}.`;
+  if (s.ini.ketutup > 0) return `Harusnya ${rp(harus)}, udah kepotong simpanan ${rp(s.ini.ketutup)}.`;
+  return `Harusnya ${rp(harus)}.`;
+}
+function ramalBayar(d, lineId, x) {
+  const s = simulasiBayar(d, lineId, x);
+  if (!s) return { teks: "", jenis: "" };
+  if (s.ini.sisa > 0) return { teks: `Kurang ${rp(s.ini.sisa + s.lalu)}, ntar nyangkut buat dibayar nanti.`, jenis: "kurang" };
+  if (s.simpanan > 0) return { teks: `Lebih ${rp(s.simpanan)}, jadi simpanan di ${s.pembeli}.`, jenis: "lebih" };
+  if (s.lalu > 0) return { teks: `Pas buat catatan ini, kurangan sebelumnya ${rp(s.lalu)} masih nyangkut.`, jenis: "kurang" };
+  if (x > s.ini.tagihan) return { teks: `Pas! Lebihnya ${rp(x - s.ini.tagihan)} nutup tagihan lain.`, jenis: "ok" };
+  return { teks: "Pas!", jenis: "ok" };
+}
+/* Tulisan di kotak ± dari isi kolomnya. */
+function ramalTeks(d, lineId, nilai) {
+  const x = parseNominal(nilai);
+  if (Number.isNaN(x)) return { teks: "Nominalnya gak kebaca.", jenis: "kurang" };
+  return x ? ramalBayar(d, lineId, x) : { teks: "", jenis: "" };
 }
 
 /* ---------- biaya tambahan: ongkir, PPN, diskon, dll ----------
@@ -98,8 +217,8 @@ function hitung(d) {
     if (kunci(l.nama) === pk) continue;
     if (l.jumlah == null) { pending++; continue; }
     total += l.jumlah;
-    if (l.lunas || l.jumlah === 0) balik += l.jumlah;
-    else { nyangkut += l.jumlah; orangNyangkut++; }
+    balik += l.jumlah - l.sisa;
+    if (l.sisa > 0) { nyangkut += l.sisa; orangNyangkut++; }
   }
   const st = !ls.length ? "kosong" : pending ? "pending" : nyangkut > 0 ? "owe" : "paid";
   return { ls, total, balik, nyangkut, pending, orangNyangkut, st };
@@ -137,15 +256,15 @@ function rekap() {
     if (s.pending) pend.push({ id, data, n: s.pending });
     for (const l of s.ls) {
       const dk = kunci(l.nama);
-      if (dk === pk || l.jumlah == null || l.lunas || l.jumlah === 0) continue;
+      if (dk === pk || l.jumlah == null || !l.sisa) continue;
       let c = per.get(pk);
       if (!c) { c = { nama: pb, key: pk, total: 0, debitur: new Map() }; per.set(pk, c); }
       let x = c.debitur.get(dk);
       if (!x) { x = { nama: l.nama, key: dk, total: 0, items: [] }; c.debitur.set(dk, x); }
-      x.total += l.jumlah;
-      x.items.push({ docId: id, lineId: l.id, jumlah: l.jumlah, beli: rapikan(data.beli) || "jajan", pesanan: l.pesanan, tanggal: data.tanggal });
-      c.total += l.jumlah;
-      owed.set(dk + "\u0000" + pk, (owed.get(dk + "\u0000" + pk) || 0) + l.jumlah);
+      x.total += l.sisa;
+      x.items.push({ docId: id, lineId: l.id, jumlah: l.sisa, beli: rapikan(data.beli) || "jajan", pesanan: l.pesanan, tanggal: data.tanggal });
+      c.total += l.sisa;
+      owed.set(dk + "\u0000" + pk, (owed.get(dk + "\u0000" + pk) || 0) + l.sisa);
     }
   }
   return { per: [...per.values()].sort((a, b) => b.total - a.total), pend, owed };
@@ -157,7 +276,7 @@ const labelCatatan = (d) => `${rapikan(d.beli) || "Jajan"} ${tglPendek(d.tanggal
 const kapanCatatan = (d) => tglPendek(d.tanggal) + (waktuValid(d.waktu) ? `, ${labelWaktu(d.waktu).toLowerCase()}` : "");
 /* Yang masih perlu ditagih di satu catatan: belum lunas, atau nominalnya belum diitung. */
 function belumBeres(d) { const pk = kunci(d.pembeli); return baris(d).filter((l) => kunci(l.nama) !== pk && !l.lunas && l.jumlah !== 0); }
-const isiBaris = (l) => `${l.jumlah == null ? "belum diitung" : rp(l.jumlah)}${l.pesanan ? ` (${l.pesanan})` : ""}`;
+const isiBaris = (l) => (l.jumlah == null ? "belum diitung" : rp(l.sisa) + (l.sisa < l.jumlah ? ` (sisa dari ${rp(l.jumlah)})` : "")) + (l.pesanan ? ` (${l.pesanan})` : "");
 /* "Transfer ke mana?": maks 3 rekening/e-wallet per catatan, isinya ditulis bebas (BCA, DANA, GoPay, dst). */
 const MAKS_REKENING = 3;
 function rekening(d) {
@@ -242,7 +361,7 @@ function bedaCatatan(lama, baru) {
     if (!o) { out.push(`nambah ${l.nama}`); continue; }
     if (o.harga !== l.jumlah) out.push(l.jumlah == null ? `ngosongin nominal ${l.nama}` : `nominal ${l.nama} jadi ${rp(l.jumlah)}`);
     if (o.pesanan !== rapikan(l.pesanan)) out.push(`pesanan ${l.nama} jadi “${rapikan(l.pesanan) || "-"}”`);
-    if (o.lunas !== !!l.lunas) out.push(l.lunas ? `${l.nama} lunas` : `${l.nama} batal lunas`);
+    if (o.lunasAsli !== !!l.lunas) out.push(l.lunas ? `${l.nama} lunas` : `${l.nama} batal lunas`);
   }
   for (const [k, o] of L) if (!B.has(k)) out.push(`hapus ${o.nama}`);
   const sigBiaya = (d) => JSON.stringify([daftarBiaya(d), angka(d.hargaPembeli) || 0, bulatanCatatan(d)]);
@@ -322,7 +441,7 @@ function pesanJapri(docs, dk) {
     isi.push(`  ${linkCatatan(id, d)}`);
     for (const r of rekening(d)) rek.push([pb, teksRekening(r)]);
     if (l.jumlah == null) adaPending = true;
-    else { total += l.jumlah; kePembeli.add(pb); }
+    else { total += l.sisa; kePembeli.add(pb); }
   }
   if (!isi.length) return `Hai ${nama}, di catatan yang dipilih gak ada titipan kamu yang nyangkut. Aman!`;
   const out = [`Hai ${nama}, mau ngingetin titipan jajan nih 🙏`, "", ...isi, ""];

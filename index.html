@@ -66,6 +66,8 @@
           <button id="btn-baru" class="btn primary" type="button" hidden>+ Catatan baru</button>
         </div>
         <div id="papan" class="papan"></div>
+        <div id="papan-foto" class="papan-foto" aria-label="Foto yang ditempel di papan" hidden></div>
+        <input id="foto-file" type="file" accept="image/*" multiple hidden>
       </section>
     </div>
 
@@ -218,6 +220,18 @@
       <button type="button" class="btn ghost" id="btn-batal">Gak jadi</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="dlg-foto" class="dlg-foto" aria-label="Foto di papan">
+  <div class="polaroid-besar">
+    <button type="button" class="f-tutup" id="foto-x" aria-label="Tutup foto">×</button>
+    <img id="foto-besar" alt="">
+    <input id="foto-ket" type="text" maxlength="60" autocomplete="off" placeholder="kasih keterangan, misal: nota kopi" aria-label="Keterangan foto">
+    <div class="foto-bawah">
+      <span id="foto-info"></span>
+      <button type="button" class="btn small ghost danger" id="foto-hapus">Copot foto</button>
+    </div>
+  </div>
 </dialog>
 
 <datalist id="dl-nama"></datalist>

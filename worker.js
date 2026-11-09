@@ -7,17 +7,25 @@
    PATCH  /api/titipan/:id          ubah sebagian pakai jalur bertitik: { ubah: { "orang.o1.lunas": true }, hapus: ["riwayat.r1"] }
    DELETE /api/titipan/:id          hapus catatan
    POST   /api/titipan/:id/pindah   catatan lama dari browser, disimpan cuma kalau ID-nya belum ada
-   GET    /api/live                 WebSocket, dikabarin tiap ada catatan yang berubah */
+   GET    /api/foto/:id             ambil foto yang ditempel di papan (JPEG)
+   PUT    /api/foto/:id?tanggal=&oleh=&w=&h=   tempel foto baru, isinya JPEG mentah
+   PATCH  /api/foto/:id             ganti keterangan foto: { ket }
+   DELETE /api/foto/:id             copot foto
+   GET    /api/live                 WebSocket, dikabarin tiap ada catatan atau foto yang berubah */
 
 import { DurableObject } from "cloudflare:workers";
 
 const MAKS_CATATAN = 5000;
 const MAKS_BODY = 100000;
+const MAKS_FOTO_BYTES = 1500000;
+const MAKS_FOTO = 1000;
+const MAKS_FOTO_TANGGAL = 12;
+const POTONGAN_FOTO = 100 * 1024; // foto disimpan per potongan, biar aman dari batas ukuran satu nilai di penyimpanan
 const POLA_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const TERLARANG = new Set(["__proto__", "constructor", "prototype"]);
 const KUNCI_CATATAN = new Set(["tanggal", "waktu", "beli", "jenis", "pembeli", "warna", "orang", "dibuat", "diubah", "contoh", "riwayat", "transfer",
   "biaya", "hargaPembeli", "bulat"]);
-const KUNCI_ORANG = new Set(["nama", "pesanan", "jumlah", "lunas", "urut"]);
+const KUNCI_ORANG = new Set(["nama", "pesanan", "jumlah", "lunas", "bayar", "urut"]);
 const KUNCI_REKENING = new Set(["nama", "jenis", "nomor"]);
 const KUNCI_BIAYA = new Set(["nama", "nilai", "persen", "kurang", "bagi"]);
 const KUNCI_RIWAYAT = new Set(["t", "oleh", "teks"]);
@@ -29,27 +37,28 @@ export default {
     const papan = env.PAPAN.get(env.PAPAN.idFromName("papan"));
     if (req.method === "GET" || req.method === "HEAD") return papan.fetch(req);
     // Isinya dibaca di sini dulu (ada batasnya), baru diterusin ke Papan.
-    const isi = await bacaIsi(req);
+    const foto = req.method === "PUT" && pathname.startsWith("/api/foto/");
+    const isi = await bacaIsi(req, foto ? MAKS_FOTO_BYTES : MAKS_BODY);
     if (isi === null) return jawab({ ok: false, kode: "invalid", pesan: "Isinya kegedean" }, 413);
-    return papan.fetch(new Request(req.url, { method: req.method, headers: { "content-type": "application/json" }, body: isi }));
+    return papan.fetch(new Request(req.url, { method: req.method, headers: { "content-type": foto ? "image/jpeg" : "application/json" }, body: isi }));
   },
 };
 
-async function bacaIsi(req) {
-  if (!req.body) return "";
+async function bacaIsi(req, maks) {
+  if (!req.body) return new Uint8Array(0);
   const baca = req.body.getReader(), potongan = [];
   let total = 0;
   for (;;) {
     const { done, value } = await baca.read();
     if (done) break;
     total += value.byteLength;
-    if (total <= MAKS_BODY) potongan.push(value); // lewat batas: tetap dibaca sampai habis, tapi dibuang
+    if (total <= maks) potongan.push(value); // lewat batas: tetap dibaca sampai habis, tapi dibuang
   }
-  if (total > MAKS_BODY) return null;
+  if (total > maks) return null;
   const semua = new Uint8Array(total);
   let i = 0;
   for (const p of potongan) { semua.set(p, i); i += p.byteLength; }
-  return new TextDecoder().decode(semua);
+  return semua;
 }
 
 class Ditolak extends Error {
@@ -81,7 +90,8 @@ function cekCatatan(d) {
   for (const [k, o] of Object.entries(d.orang)) {
     if (!idValid(k) || !peta(o) || !kunciAman(o, KUNCI_ORANG) || !teks(o.nama, 0, 60)
       || !boleh(o.pesanan, (x) => teks(x, 0, 200)) || !boleh(o.jumlah, (x) => x === null || angka(x))
-      || !boleh(o.lunas, (x) => typeof x === "boolean") || !boleh(o.urut, angka)) return "Data yang nitip nggak valid";
+      || !boleh(o.lunas, (x) => typeof x === "boolean") || !boleh(o.urut, angka)
+      || !boleh(o.bayar, (x) => x === null || (angka(x) && x >= 0 && x <= 1e9))) return "Data yang nitip nggak valid";
   }
   if (d.riwayat !== undefined) {
     if (!peta(d.riwayat) || Object.keys(d.riwayat).length > 60) return "Riwayatnya kebanyakan";
@@ -143,16 +153,19 @@ export class Papan extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.catatan = new Map(); // id -> { v, d }; v = nomor versi, biar browser tahu mana kabar yang paling baru
+    this.foto = new Map();    // id -> { v, d }; cuma detailnya, isi fotonya baru dibaca pas diminta
     this.versi = 0;
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
     ctx.blockConcurrencyWhile(async () => {
       this.versi = (await ctx.storage.get("versi")) || 0;
       for (const [k, x] of await ctx.storage.list({ prefix: "t:" })) this.catatan.set(k.slice(2), x);
+      for (const [k, x] of await ctx.storage.list({ prefix: "f:" })) this.foto.set(k.slice(2), x);
     });
   }
 
   async fetch(req) {
     try {
+      if (new URL(req.url).pathname.startsWith("/api/foto/")) return await this.layaniFoto(req);
       // Isi request selalu dihabisin dulu sebelum jawab, biar nggak ada yang nyangkut.
       const isi = req.method === "GET" || req.method === "HEAD" ? "" : await req.text();
       return await this.layani(req, isi);
@@ -171,7 +184,9 @@ export class Papan extends DurableObject {
       if (req.method !== "GET") throw new Ditolak(405, "invalid", "Cuma bisa dibaca");
       const catatan = [];
       for (const [i, x] of this.catatan) catatan.push({ id: i, v: x.v, data: x.d });
-      return jawab({ ok: true, versi: this.versi, catatan });
+      const foto = [];
+      for (const [i, x] of this.foto) foto.push({ id: i, v: x.v, data: x.d });
+      return jawab({ ok: true, versi: this.versi, catatan, foto });
     }
     if (!idValid(id)) throw new Ditolak(400, "invalid", "ID catatannya nggak valid");
     if (ekor === "pindah" && req.method === "POST") {
@@ -209,6 +224,73 @@ export class Papan extends DurableObject {
     this.catatan.delete(id);
     await Promise.all([this.ctx.storage.delete("t:" + id), this.ctx.storage.put("versi", v)]);
     this.siarkan({ id, v, data: null });
+    return jawab({ ok: true, id, v, data: null });
+  }
+
+  /* Foto di papan. Detailnya (tanggal, keterangan, dll) di "f:id", isinya dipotong-potong di "fb:id:n". */
+  async layaniFoto(req) {
+    const url = new URL(req.url), bagian = url.pathname.split("/").filter(Boolean), id = bagian[2];
+    const baca = req.method === "GET" || req.method === "HEAD";
+    const isi = baca ? null : new Uint8Array(await req.arrayBuffer());
+    if (bagian.length !== 3 || !idValid(id)) throw new Ditolak(400, "invalid", "ID fotonya nggak valid");
+    if (baca) return this.kirimFoto(id);
+    if (req.method === "PUT") return this.tempelFoto(id, isi, url.searchParams);
+    if (req.method === "PATCH") {
+      const body = uraikan(new TextDecoder().decode(isi));
+      const x = this.foto.get(id);
+      if (!x) throw new Ditolak(404, "not-found", "Fotonya udah dicopot");
+      if (!teks(body.ket, 0, 60)) throw new Ditolak(400, "invalid", "Keterangannya kepanjangan");
+      return this.simpanFoto(id, { ...x.d, ket: body.ket });
+    }
+    if (req.method === "DELETE") return this.copotFoto(id);
+    throw new Ditolak(405, "invalid", "Caranya nggak didukung");
+  }
+
+  async kirimFoto(id) {
+    const x = this.foto.get(id);
+    if (!x) throw new Ditolak(404, "not-found", "Fotonya udah dicopot");
+    const kunci = Array.from({ length: x.d.potongan }, (_, i) => `fb:${id}:${i}`);
+    const isi = await this.ctx.storage.get(kunci);
+    const semua = new Uint8Array(x.d.ukuran);
+    let i = 0;
+    for (const k of kunci) { const p = isi.get(k); semua.set(p, i); i += p.byteLength; }
+    // ID foto nggak pernah dipakai ulang, jadi browser boleh nyimpen selamanya
+    return new Response(semua, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=31536000, immutable", "x-content-type-options": "nosniff" } });
+  }
+
+  async tempelFoto(id, isi, q) {
+    if (isi.length < 4 || isi.length > MAKS_FOTO_BYTES || isi[0] !== 0xff || isi[1] !== 0xd8 || isi[2] !== 0xff)
+      throw new Ditolak(400, "invalid", "Fotonya harus JPEG dan nggak boleh kegedean");
+    const tanggal = q.get("tanggal") || "", oleh = q.get("oleh") || "", w = Number(q.get("w")), t = Number(q.get("h"));
+    const ukuranOk = (x) => Number.isInteger(x) && x >= 1 && x <= 10000;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal) || !teks(oleh, 0, 30) || !ukuranOk(w) || !ukuranOk(t)) throw new Ditolak(400, "invalid", "Detail fotonya nggak valid");
+    if (this.foto.has(id)) throw new Ditolak(409, "invalid", "ID fotonya udah kepakai");
+    if (this.foto.size >= MAKS_FOTO) throw new Ditolak(507, "resource-exhausted", "Foto di papan udah penuh, copot yang lama dulu ya");
+    let diTanggalIni = 0;
+    for (const x of this.foto.values()) if (x.d.tanggal === tanggal) diTanggalIni++;
+    if (diTanggalIni >= MAKS_FOTO_TANGGAL) throw new Ditolak(400, "invalid", `Satu tanggal maksimal ${MAKS_FOTO_TANGGAL} foto, copot yang lain dulu ya`);
+    const potongan = {};
+    let n = 0;
+    for (let i = 0; i < isi.length; i += POTONGAN_FOTO) potongan[`fb:${id}:${n++}`] = isi.slice(i, i + POTONGAN_FOTO);
+    return this.simpanFoto(id, { tanggal, ket: "", oleh, w, h: t, ukuran: isi.length, potongan: n, dibuat: Date.now() }, potongan);
+  }
+
+  async simpanFoto(id, d, potongan = {}) {
+    const v = ++this.versi;
+    this.foto.set(id, { v, d });
+    await this.ctx.storage.put({ ...potongan, ["f:" + id]: { v, d }, versi: v });
+    this.siarkan({ fotoId: id, fv: v, foto: d });
+    return jawab({ ok: true, id, v, data: d });
+  }
+
+  async copotFoto(id) {
+    const x = this.foto.get(id);
+    if (!x) return jawab({ ok: true, id, v: this.versi, data: null });
+    const v = ++this.versi;
+    this.foto.delete(id);
+    const kunci = Array.from({ length: x.d.potongan }, (_, i) => `fb:${id}:${i}`);
+    await Promise.all([this.ctx.storage.delete(["f:" + id, ...kunci]), this.ctx.storage.put("versi", v)]);
+    this.siarkan({ fotoId: id, fv: v, foto: null });
     return jawab({ ok: true, id, v, data: null });
   }
 

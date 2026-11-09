@@ -44,7 +44,7 @@ function pulihkanFokus(root, sel, fokus) {
   const el = box && $$("[data-fk]", box).find((e) => e.dataset.fk === fokus.fk);
   if (el && document.activeElement !== el) {
     el.focus({ preventScroll: true });
-    if (el.tagName === "INPUT" && el.classList.contains("nom-edit")) el.select();
+    if (el.tagName === "INPUT" && (el.classList.contains("nom-edit") || el.classList.contains("bayar-edit"))) el.select();
   }
   return !!el || !box;
 }
@@ -71,6 +71,7 @@ function renderKalender() {
   const grid = $("#kal-grid");
   const fokusTgl = grid.contains(document.activeElement) ? document.activeElement.dataset.tgl : null;
   const per = S.loaded ? catatanPerTanggal() : new Map();
+  const adaFoto = new Set(S.foto.map((f) => f.data.tanggal));
   const today = isoLokal(new Date());
   const awal = (new Date(y, m, 1).getDay() + 6) % 7; // minggu mulai Senin
   const jml = new Date(y, m + 1, 0).getDate();
@@ -85,10 +86,11 @@ function renderKalender() {
       type: "button", "data-tgl": iso, tabindex: iso === S.tglPilih ? "0" : "-1",
       class: "kal-sel" + (iso === today ? " hari-ini" : "") + (iso === S.tglPilih ? " dipilih" : "") + (libur ? " libur" : ""),
       "aria-pressed": String(iso === S.tglPilih),
-      "aria-label": `${tglPanjang(iso)}${iso === today ? " (hari ini)" : ""}${libur ? ", tanggal merah" : ""}, ${notes.length ? notes.length + " catatan" : "belum ada catatan"}${belum ? ", ada yang belum lunas" : ""}`,
+      "aria-label": `${tglPanjang(iso)}${iso === today ? " (hari ini)" : ""}${libur ? ", tanggal merah" : ""}, ${notes.length ? notes.length + " catatan" : "belum ada catatan"}${belum ? ", ada yang belum lunas" : ""}${adaFoto.has(iso) ? ", ada foto" : ""}`,
     },
       h("span", { class: "kal-tgl" }, String(d)),
       belum ? h("span", { class: "kal-dot", title: "Ada yang belum lunas" }) : null,
+      adaFoto.has(iso) ? h("span", { class: "kal-foto", title: "Ada foto" }) : null,
       notes.length ? h("span", { class: "kal-notes" },
         notes.slice(0, 3).map((n) => h("span", {
           class: "kal-mini", style: `--note:${kertasBg(n.data.warna)};--rot:${((hashStr(n.id) % 5) - 2) * 4}deg`,
@@ -109,6 +111,7 @@ const noteCache = new Map();
 function uiKey(id) {
   return [
     S.editing && S.editing.id === id ? "e:" + S.editing.lineId : "",
+    S.bayar && S.bayar.id === id ? "b:" + S.bayar.lineId : "",
     S.join && S.join.id === id ? "j" : "",
     S.confirm && S.confirm.kind === "hapus" && S.confirm.id === id ? "c" : "",
     S.baruId === id ? "n" : "",
@@ -127,13 +130,46 @@ function kosongPapan() {
     h("strong", null, "Belum ada yang jajan nih"),
     h("span", null, "Ada yang mau jajan? Klik “+ Catatan baru”, tulis siapa yang beli sama beli apa. Yang mau nitip tinggal nimbrung masukin nama."));
 }
+/* Tulisan kecil di bawah nama: dibayar berapa, kurang/lebih, kepotong simpanan, kurangan yang kebawa. */
+function ketBayar(l) {
+  if (l.jumlah == null) return null;
+  const isi = [];
+  if (l.bayar != null && l.bayar !== l.jumlah) {
+    isi.push(`dibayar ${rp(l.bayar)}`);
+    if (l.bayar > l.jumlah) isi.push(h("b", { class: "lebih" }, `lebih ${rp(l.bayar - l.jumlah)}`));
+    else if (l.sisa > 0) isi.push(h("b", { class: "kurang" }, `kurang ${rp(l.sisa)}`));
+    else isi.push(h("b", { class: "ok" }, "kurangnya udah ketutup"));
+  } else if (l.bayar == null && l.ketutup > 0) {
+    isi.push(`kepotong simpanan ${rp(l.ketutup)}`);
+    if (l.sisa > 0) isi.push(h("b", { class: "kurang" }, `sisa ${rp(l.sisa)}`));
+  }
+  if (l.kurangLalu > 0 && l.sisa > 0) isi.push(`+ kurangan sebelumnya ${rp(l.kurangLalu)}, jadi ${rp(l.sisa + l.kurangLalu)}`);
+  if (l.bayar > l.jumlah && l.simpanan > 0) isi.push(h("b", { class: "lebih" }, `simpanan ${rp(l.simpanan)}`));
+  if (!isi.length) return null;
+  const el = h("span", { class: "n-bayar" });
+  isi.forEach((x, i) => { if (i) el.append(" · "); el.append(x); });
+  return el;
+}
+function buildBayarEdit(id, l) {
+  const d = cariDoc(id).data, r = ramalTeks(d, l.id, S.bayar.value), kolom = `bayar-${id}-${l.id}`;
+  return h("form", { class: "n-bayar-edit", novalidate: true },
+    h("label", { for: kolom }, `${l.nama} bayar berapa?`),
+    h("input", { class: "bayar-edit", id: kolom, type: "text", "data-fk": "bayar-edit:" + l.id, inputmode: "decimal", autocomplete: "off", placeholder: "misal: 57000", value: S.bayar.value }),
+    h("p", { class: "n-bayar-harus" }, teksHarusBayar(d, l.id)),
+    h("p", { class: "n-bayar-ramal " + r.jenis, "aria-live": "polite" }, r.teks),
+    h("div", { class: "j-aksi" },
+      h("button", { type: "submit", class: "btn small primary", "data-fk": "bayar-simpan" }, "Simpan"),
+      h("button", { type: "button", class: "btn small ghost", "data-act": "bayar-batal", "data-fk": "bayar-batal" }, "Gak jadi")));
+}
 function buildLine(id, l, sendiri, ro) {
   const ed = S.editing && S.editing.id === id && S.editing.lineId === l.id;
+  const edBayar = S.bayar && S.bayar.id === id && S.bayar.lineId === l.id;
   const beres = l.lunas || l.jumlah === 0;
   const li = h("li", { class: "n-line" + (l.jumlah == null ? " pending" : beres ? " lunas" : "") });
   li.append(h("div", { class: "n-who" }, ava(l.nama),
     h("span", { class: "n-text" }, h("span", { class: "n-nama" }, l.nama), l.pesanan ? h("span", { class: "n-pesan" }, l.pesanan) : null,
-      l.harga != null && l.jumlah !== l.harga ? h("span", { class: "n-harga" }, `harga ${rp(l.harga)}`) : null)));
+      l.harga != null && l.jumlah !== l.harga ? h("span", { class: "n-harga" }, `harga ${rp(l.harga)}`) : null,
+      sendiri ? null : ketBayar(l))));
   const teks = l.jumlah === 0 ? "ditraktir" : l.jumlah == null ? "" : rp(l.jumlah);
   let nom;
   if (ed) nom = h("input", { class: "nom-edit", id: `nom-${id}-${l.id}`, "data-fk": "nom:" + l.id, inputmode: "decimal", autocomplete: "off", placeholder: "25k", value: S.editing.value, "aria-label": `Nominal ${l.nama}. Enter buat simpan, Esc buat batal.` });
@@ -144,11 +180,21 @@ function buildLine(id, l, sendiri, ro) {
   if (sendiri) li.append(h("span", { class: "n-ket" }, "punya sendiri"));
   else if (l.jumlah === 0) li.append(h("span", { class: "n-ket ok" }, "aman"));
   else if (ro) li.append(h("span", { class: "n-ket" + (l.lunas ? " ok" : "") }, l.jumlah == null ? "" : l.lunas ? "✓ lunas" : "belum"));
-  else li.append(h("button", {
-    type: "button", class: "n-lunas", "aria-pressed": String(l.lunas), "data-act": "lunas", "data-line": l.id, "data-fk": "lunas:" + l.id,
-    disabled: l.jumlah == null, title: l.jumlah == null ? "Isi nominalnya dulu ya" : l.lunas ? "Batalin tanda lunas" : "Tandain udah bayar",
-    "aria-label": `${l.nama} lunas`,
-  }, "Lunas"));
+  else {
+    const dariSimpanan = l.lunas && !l.masuk; // ketutup simpanan semua, nggak ada yang bisa dibatalin di sini
+    li.append(h("span", { class: "n-tombol" },
+      l.jumlah != null ? h("button", {
+        type: "button", class: "n-pm" + (l.bayar != null ? " ada" : ""), "data-act": "bayar", "data-line": l.id, "data-fk": "pm:" + l.id, "aria-expanded": String(!!edBayar),
+        title: "Bayarnya lebih atau kurang? Catat di sini", "aria-label": `Bayarnya ${l.nama} lebih atau kurang?`,
+      }, "±") : null,
+      h("button", {
+        type: "button", class: "n-lunas", "aria-pressed": String(l.lunas), "data-act": "lunas", "data-line": l.id, "data-fk": "lunas:" + l.id,
+        disabled: l.jumlah == null || dariSimpanan,
+        title: l.jumlah == null ? "Isi nominalnya dulu ya" : dariSimpanan ? "Kebayar dari simpanan" : l.lunas ? "Batalin tanda lunas" : "Tandain udah bayar",
+        "aria-label": `${l.nama} lunas`,
+      }, "Lunas")));
+  }
+  if (edBayar) li.append(buildBayarEdit(id, l));
   return li;
 }
 function buildJoin(id) {
@@ -249,9 +295,9 @@ function buildNote(n) {
 function renderPapan() {
   const tgl = S.tglPilih;
   const notes = S.loaded ? (catatanPerTanggal().get(tgl) || []) : [];
-  const u = umur(tgl);
+  const u = umur(tgl), nFoto = S.foto.filter((f) => f.data.tanggal === tgl).length;
   $("#papan-judul").textContent = tglPanjang(tgl);
-  $("#papan-sub").textContent = [u, S.loaded ? (notes.length ? `${notes.length} catatan` : "belum ada catatan") : ""].filter(Boolean).join(" · ");
+  $("#papan-sub").textContent = [u, S.loaded ? (notes.length ? `${notes.length} catatan` : "belum ada catatan") : "", nFoto ? `${nFoto} foto` : ""].filter(Boolean).join(" · ");
   $("#btn-baru").hidden = !bolehNulis();
 
   const papan = $("#papan");
@@ -259,7 +305,7 @@ function renderPapan() {
   const actNote = act && act.closest ? act.closest(".note[data-id]") : null;
   const fokus = S.fokus || (actNote && act.dataset.fk ? { id: actNote.dataset.id, fk: act.dataset.fk } : null);
   const els = !notes.length ? [kosongPapan()] : notes.map((n) => {
-    const ui = uiKey(n.id), c = noteCache.get(n.id);
+    const ui = uiKey(n.id) + "|" + sigBuku(n.data), c = noteCache.get(n.id);
     if (c && c.sig === n.sig && c.ui === ui) return c.el;
     const el = buildNote(n);
     noteCache.set(n.id, { sig: n.sig, ui, el });
@@ -273,6 +319,51 @@ function renderPapan() {
     const el = papan.querySelector(`.note[data-id="${CSS.escape(S.scrollTo)}"]`);
     if (el) { el.scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "nearest" }); S.scrollTo = null; }
   }
+  renderFoto();
+}
+
+/* ---------- foto di papan: polaroid yang ditempel pakai paku payung ---------- */
+const WARNA_PIN = ["#C0392B", "#A8693A", "#D9A21B", "#5A3517", "#D2691E"];
+const IKON_KAMERA = '<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l1.6-2.4h6.800L17 8h3a1.500 1.500 0 0 1 1.500 1.500V18a1.500 1.500 0 0 1-1.500 1.500H4A1.500 1.500 0 0 1 2.500 18V9.500A1.500 1.500 0 0 1 4 8z"/><circle cx="12" cy="13.500" r="3.500"/></svg>';
+const gayaPolaroid = (id) => { const x = hashStr(id); return `--rot:${(x % 11) - 5}deg;--turun:${(x % 3) * 5}px;--pin:${WARNA_PIN[x % WARNA_PIN.length]}`; };
+const fotoCache = new Map();
+let fotoTambahEl = null;
+function polaroid(f) {
+  const ket = f.data.ket || "";
+  let c = fotoCache.get(f.id);
+  if (!c) {
+    const baru = S.fotoBaru.delete(f.id);
+    const teks = h("span", { class: "polaroid-ket" });
+    const img = h("img", { src: S.fotoLokal.get(f.id) || S.store.foto.alamat(f.id), loading: "lazy" });
+    const el = h("button", { type: "button", class: "polaroid" + (baru ? " cuci" : ""), "data-foto": f.id, style: gayaPolaroid(f.id) }, img, teks);
+    c = { el, img, teks };
+    fotoCache.set(f.id, c);
+  }
+  c.teks.textContent = ket;
+  c.img.alt = ket || "Foto di papan";
+  c.el.setAttribute("aria-label", `Buka foto${ket ? ": " + ket : ""}`);
+  return c.el;
+}
+function renderFoto() {
+  const box = $("#papan-foto");
+  if (!S.store || !S.store.foto || !S.loaded) { box.hidden = true; return; }
+  const tgl = S.tglPilih;
+  const foto = S.foto.filter((f) => f.data.tanggal === tgl).sort((a, b) => (Number(a.data.dibuat) || 0) - (Number(b.data.dibuat) || 0));
+  const sudah = new Set(foto.map((f) => f.id));
+  const naik = S.fotoNaik.filter((n) => n.tanggal === tgl && !sudah.has(n.id));
+  const els = foto.map(polaroid);
+  for (const n of naik) els.push(h("div", { class: "polaroid naik", style: gayaPolaroid(n.id), role: "status", "aria-label": "Fotonya lagi ditempel" },
+    n.url ? h("img", { src: n.url, alt: "" }) : h("span", { class: "foto-kosong" }),
+    h("span", { class: "polaroid-ket" }, "lagi nyuci foto…")));
+  if (bolehNulis() && foto.length + naik.length < MAKS_FOTO_TANGGAL) {
+    if (!fotoTambahEl) fotoTambahEl = h("button", { type: "button", class: "polaroid tambah", id: "foto-tambah", title: "Bisa juga seret foto ke papan, atau tempel pakai Ctrl+V" },
+      h("span", { html: IKON_KAMERA }), h("span", null, "Tempel foto"));
+    els.push(fotoTambahEl);
+  }
+  reconcile(box, els);
+  box.hidden = !els.length;
+  const ada = new Set(S.foto.map((f) => f.id));
+  for (const k of fotoCache.keys()) if (!ada.has(k)) fotoCache.delete(k);
 }
 
 /* ---------- ringkasan "aku" ---------- */
@@ -292,6 +383,11 @@ function renderAku(r) {
   } else kids.push(h("p", null, "Gak ada yang perlu kamu balikin. Aman, bestie!"));
   if (keKamu) kids.push(h("p", null, "Yang belum balikin ke kamu: ", h("strong", null, rp(keKamu.total)), ` dari ${keKamu.debitur.size} orang.`));
   if (pendKamu) kids.push(h("p", { class: "muted" }, `Ada ${pendKamu} catatan yang ada kamunya, tapi nominalnya belum diitung.`));
+  // Kelebihan bayar: simpanan kamu di orang lain, dan simpanan orang lain yang kamu pegang
+  const simpanan = bukuBayar().simpanan;
+  for (const p of simpanan) if (p.key === k) kids.push(h("p", null, "Kamu punya simpanan ", h("strong", null, rp(p.simpanan)), ` di ${p.pembeli}. Otomatis kepotong ke jajan berikutnya.`));
+  const kupegang = simpanan.filter((p) => p.pk === k);
+  if (kupegang.length) kids.push(h("p", null, "Kamu lagi megang simpanan ", h("strong", null, rp(kupegang.reduce((a, p) => a + p.simpanan, 0))), ` dari ${kupegang.map((p) => p.nama).join(", ")}.`));
   // Saling nyangkut sama orang yang sama? Kasih tau bisa saling potong.
   for (const c of r.per) {
     if (c.key === k) continue;
@@ -317,9 +413,28 @@ function buildTiketBaris(id, l, ro) {
   }, yakin ? "Yakin?" : "Lunasin");
   return h("li", { class: "t-baris" },
     ava(l.nama, "kecil"),
-    h("span", { class: "d-id" }, h("span", { class: "d-nama" }, l.nama), l.pesanan ? h("span", { class: "d-ket" }, l.pesanan) : null),
-    h("span", { class: "d-nom" + (l.jumlah == null ? " belum" : "") }, l.jumlah == null ? "belum diitung" : rp(l.jumlah)),
+    h("span", { class: "d-id" }, h("span", { class: "d-nama" }, l.nama), l.pesanan ? h("span", { class: "d-ket" }, l.pesanan) : null,
+      l.jumlah != null && l.sisa < l.jumlah ? h("span", { class: "d-ket" }, `sisa dari ${rp(l.jumlah)}`) : null),
+    h("span", { class: "d-nom" + (l.jumlah == null ? " belum" : "") }, l.jumlah == null ? "belum diitung" : rp(l.sisa)),
     aksi);
+}
+/* Kelebihan bayar yang lagi dipegang yang beli. */
+function buildSimpanan(ro) {
+  const list = bukuBayar().simpanan;
+  if (!list.length) return null;
+  return h("section", { class: "simpanan", "aria-label": "Simpanan dari kelebihan bayar" },
+    h("h3", { class: "simpanan-judul" }, "Simpanan"),
+    h("p", { class: "simpanan-ket" }, "Kelebihan bayar, otomatis kepotong ke jajan berikutnya."),
+    h("ul", null, list.map((p) => {
+      const yakin = S.confirm && S.confirm.kind === "simpanan" && S.confirm.dk === p.key && S.confirm.pk === p.pk;
+      return h("li", null, ava(p.nama, "kecil"),
+        h("span", { class: "d-id" }, h("span", { class: "d-nama" }, p.nama), h("span", { class: "d-ket" }, `di ${p.pembeli}`)),
+        h("span", { class: "d-nom" }, rp(p.simpanan)),
+        ro ? h("span") : h("button", {
+          type: "button", class: "mini" + (yakin ? " yakin" : ""), "data-act": "balikin", "data-dk": p.key, "data-pk": p.pk, "data-fk": `balikin:${p.key}:${p.pk}`,
+          "aria-label": yakin ? `Yakin, simpanan ${p.nama} udah dibalikin` : `Tandain simpanan ${p.nama} udah dibalikin`, title: "Tandain uangnya udah dibalikin",
+        }, yakin ? "Yakin?" : "Balikin"));
+    })));
 }
 function buildTiket(t, no, ro) {
   const { id, data: d, s } = t;
@@ -360,6 +475,8 @@ function renderRekap() {
   const no = nomorCatatan();
   $("#btn-salin").hidden = !semua.length;
   const kids = [];
+  const simpanan = buildSimpanan(ro);
+  if (simpanan) kids.push(simpanan);
   if (!semua.length) kids.push(h("p", { class: "muted" }, S.docs.length ? "Gak ada yang nyangkut. Lunas semua, mantul!" : "Belum ada catatan. Ntar tiket siapa nungguin siapa muncul di sini."));
   if (semua.length > MAKS_TIKET) {
     const on = new Set(tampil.map((t) => t.id));

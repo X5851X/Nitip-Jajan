@@ -46,12 +46,13 @@ async function storeFirebase(cfg) {
 const alamatApi = (p) => new URL("api/" + p, location.href).href;
 
 async function mintaApi(method, p, body) {
+  const mentah = body instanceof Blob; // foto dikirim apa adanya, sisanya JSON
   let r;
   try {
     r = await fetch(alamatApi(p), {
       method, cache: "no-store",
-      headers: body ? { "content-type": "application/json" } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
+      headers: mentah ? { "content-type": body.type } : body ? { "content-type": "application/json" } : undefined,
+      body: mentah ? body : body ? JSON.stringify(body) : undefined,
     });
   } catch { throw Object.assign(new Error("koneksi putus"), { code: "unavailable" }); }
   const j = await r.json().catch(() => null);
@@ -69,28 +70,38 @@ async function cariServer() {
 
 function storeServer(cfg, awal) {
   const subs = new Set();
-  const docs = new Map(); // id -> { v, data }; data null = udah dihapus
+  const docs = new Map();  // id -> { v, data }; data null = udah dihapus
+  const fotos = new Map(); // sama, buat foto yang ditempel di papan
+  const fotoSubs = new Set();
   let ws = null, tunda = 1000, gagalBeruntun = 0, putus = !!awal.putus;
 
-  const pasang = (id, v, data) => {
-    const ada = docs.get(id);
+  const pasangKe = (peta, id, v, data) => {
+    const ada = peta.get(id);
     if (ada && ada.v >= v) return false;
-    docs.set(id, { v, data: data || null });
+    peta.set(id, { v, data: data || null });
     return true;
   };
-  const isiSemua = (j) => {
+  const pasang = (id, v, data) => pasangKe(docs, id, v, data);
+  const pasangFoto = (id, v, data) => pasangKe(fotos, id, v, data);
+  const isiDari = (peta, list, versi) => {
     let berubah = false;
     const ada = new Set();
-    for (const c of j.catatan) { ada.add(c.id); berubah = pasang(c.id, c.v, c.data) || berubah; }
-    for (const [id, x] of docs) if (!ada.has(id) && x.data && x.v <= j.versi) { docs.set(id, { v: j.versi, data: null }); berubah = true; }
+    for (const c of list) { ada.add(c.id); berubah = pasangKe(peta, c.id, c.v, c.data) || berubah; }
+    for (const [id, x] of peta) if (!ada.has(id) && x.data && x.v <= versi) { peta.set(id, { v: versi, data: null }); berubah = true; }
     return berubah;
   };
-  const daftar = () => {
+  const daftarDari = (peta) => {
     const semua = [];
-    for (const [id, x] of docs) if (x.data) semua.push({ id, data: x.data });
+    for (const [id, x] of peta) if (x.data) semua.push({ id, data: x.data });
     return semua;
   };
+  const daftar = () => daftarDari(docs);
   const kabari = () => { const semua = daftar(); for (const s of subs) s.next(semua); };
+  const kabariFoto = () => { const semua = daftarDari(fotos); for (const f of fotoSubs) f(semua); };
+  const isiSemua = (j) => {
+    if (isiDari(fotos, j.foto || [], j.versi)) kabariFoto();
+    return isiDari(docs, j.catatan, j.versi);
+  };
   const muatUlang = async () => {
     try {
       const berubah = isiSemua(await mintaApi("GET", "titipan"));
@@ -109,6 +120,7 @@ function storeServer(cfg, awal) {
     s.onmessage = (e) => {
       let m = null;
       try { m = JSON.parse(e.data); } catch { /* "pong" */ }
+      if (m && typeof m.fotoId === "string" && typeof m.fv === "number") { if (pasangFoto(m.fotoId, m.fv, m.foto)) kabariFoto(); return; }
       if (m && typeof m.id === "string" && typeof m.v === "number" && pasang(m.id, m.v, m.data)) kabari();
     };
     s.onclose = () => {
@@ -150,8 +162,22 @@ function storeServer(cfg, awal) {
 
   const jalur = (id) => "titipan/" + encodeURIComponent(id);
   const terima = (j) => { if (pasang(j.id, j.v, j.data)) kabari(); };
+  const jalurFoto = (id) => "foto/" + encodeURIComponent(id);
+  const terimaFoto = (j) => { if (pasangFoto(j.id, j.v, j.data)) kabariFoto(); };
   return {
     mode: "server",
+    // Foto di papan cuma ada di mode server (mode lain nggak punya tempat buat nyimpen filenya)
+    foto: {
+      subscribe(next) {
+        fotoSubs.add(next);
+        setTimeout(() => next(daftarDari(fotos)), 0);
+        return () => fotoSubs.delete(next);
+      },
+      alamat: (id) => alamatApi(jalurFoto(id)),
+      tempel: async (id, blob, detail) => terimaFoto(await mintaApi("PUT", jalurFoto(id) + "?" + new URLSearchParams(detail), blob)),
+      ubah: async (id, ket) => terimaFoto(await mintaApi("PATCH", jalurFoto(id), { ket })),
+      copot: async (id) => terimaFoto(await mintaApi("DELETE", jalurFoto(id))),
+    },
     subscribe(next, error) {
       const s = { next, error };
       subs.add(s);

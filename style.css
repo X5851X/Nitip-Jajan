@@ -162,6 +162,8 @@ button.kal-sel:hover{border-color:var(--accent)}
 .kal-sel.hari-ini .kal-tgl{background:var(--accent-bg);color:var(--accent-ink)}
 .kal-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--owe);flex:none}
 .kal-sel .kal-dot{position:absolute;top:8px;right:8px}
+.kal-foto{position:absolute;right:7px;bottom:7px;width:13px;height:15px;padding:2px 2px 4px;background:#fff;border-radius:1px;box-shadow:0 1px 2px rgb(0 0 0 / .35);transform:rotate(7deg)}
+.kal-foto::before{content:"";display:block;width:100%;height:100%;background:var(--acc-l)}
 .kal-notes{display:flex;flex-wrap:wrap;gap:3px;align-items:center}
 .kal-mini{width:24px;height:24px;background:var(--note);border-radius:3px;display:grid;place-items:center;box-shadow:0 1px 2px rgb(0 0 0 / .2);transform:rotate(var(--rot,0deg))}
 .kal-mini svg{width:20px;height:20px}
@@ -186,9 +188,40 @@ button.kal-sel:hover{border-color:var(--accent)}
 .papan-label{background:var(--paper);border-radius:8px;padding:8px 14px;box-shadow:0 2px 6px rgb(0 0 0 / .18);transform:rotate(-1deg)}
 .papan-label h2{font-size:18px}
 .papan{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,290px),1fr));gap:30px 24px;align-items:start;padding-top:8px}
+.papan-wrap.seret{outline:3px dashed #fff;outline-offset:-12px}
+
+/* foto di papan: polaroid pakai paku payung, kertasnya dikunci terang kayak sticky note */
+.papan-foto{display:flex;flex-wrap:wrap;align-items:flex-start;gap:22px 20px;padding:8px 4px 10px}
+.polaroid{position:relative;display:block;flex:none;width:136px;padding:9px 9px 30px;background:#FFFEFA;color:#3B2D27;border:0;border-radius:2px;font:inherit;cursor:zoom-in;text-align:left;
+  box-shadow:0 1px 1px rgb(0 0 0 / .1),0 10px 18px -6px rgb(70 45 25 / .45);
+  transform:translateY(var(--turun,0px)) rotate(var(--rot,0deg));transition:transform .2s ease,box-shadow .2s ease}
+button.polaroid:hover,button.polaroid:focus-visible{transform:translateY(calc(var(--turun,0px) - 4px)) rotate(0deg) scale(1.05);box-shadow:0 2px 2px rgb(0 0 0 / .12),0 16px 24px -6px rgb(70 45 25 / .5);z-index:2}
+.polaroid::before{content:"";position:absolute;top:-7px;left:50%;width:16px;height:16px;margin-left:-8px;border-radius:50%;z-index:1;
+  background:radial-gradient(circle at 35% 30%,rgb(255 255 255 / .75),transparent 45%),var(--pin,#C0392B);box-shadow:0 3px 3px rgb(0 0 0 / .4)}
+.polaroid img,.polaroid .foto-kosong{display:block;width:100%;aspect-ratio:1;object-fit:cover;background:#2B2320}
+.polaroid-ket{position:absolute;left:9px;right:9px;bottom:6px;font-family:var(--f-hand);font-size:15px;line-height:1.2;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Foto baru "jadi" pelan-pelan kayak polaroid beneran */
+.polaroid.naik{cursor:progress}
+.polaroid.naik img{filter:brightness(.25) sepia(1) blur(3px)}
+.polaroid.cuci img{animation:cuci 1.6s ease-out both}
+@keyframes cuci{from{filter:brightness(.25) sepia(1) blur(3px)}to{filter:none}}
+.polaroid.tambah{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:150px;padding:10px;background:rgb(255 253 248 / .55);border:2px dashed rgb(70 45 25 / .5);border-radius:4px;box-shadow:none;cursor:pointer;font-family:var(--f-hand);font-size:18px;line-height:1.1;text-align:center;--rot:-2deg}
+.polaroid.tambah::before{display:none}
+.polaroid.tambah:hover,.polaroid.tambah:focus-visible{background:#FFFEFA;box-shadow:0 10px 18px -6px rgb(70 45 25 / .4)}
+.polaroid.tambah svg{display:block}
+@media (max-width:600px){.papan-foto{gap:20px 14px}.polaroid{width:112px}.polaroid.tambah{min-height:128px}}
+/* foto gede */
+.dlg-foto{border:0;padding:0;background:transparent;width:min(560px,calc(100% - 24px));max-width:none;max-height:calc(100% - 24px);overflow:visible;color:#2E211B}
+.dlg-foto::backdrop{background:rgb(23 15 12 / .72)}
+.polaroid-besar{--ink:#2E211B; --ink-soft:rgb(46 33 27 / .7); --rule:rgb(46 33 27 / .25); --owe:#A8331F; color-scheme:light;
+  position:relative;display:flex;flex-direction:column;gap:10px;background:#FFFEFA;color:var(--ink);padding:16px 16px 14px;border-radius:3px;box-shadow:0 18px 40px rgb(0 0 0 / .45);transform:rotate(-.8deg);max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);overflow:auto}
+.polaroid-besar img{display:block;width:100%;max-height:68vh;max-height:68dvh;object-fit:contain;background:#2B2320}
+.polaroid-besar input[type=text]{border:0;border-bottom:1.5px dashed var(--rule);border-radius:0;background:transparent;color:var(--ink);font-family:var(--f-hand);font-size:20px;padding:4px 2px;text-align:center}
+.foto-bawah{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;font-size:12.5px;color:var(--ink-soft)}
 
 /* sticky note: kertasnya tetap berwarna terang di mode gelap, jadi token di dalamnya dikunci terang */
 .note{
+  container-type:inline-size;
   --ink:#2E211B; --ink-soft:rgb(46 33 27 / .7); --rule:rgb(46 33 27 / .22); --paper:rgb(255 255 255 / .72); --panel:rgb(255 255 255 / .5);
   --accent:var(--acc-l); --accent-bg:var(--acc-bg-l); --accent-ink:var(--acc-ink-l); --owe:#A8331F; --paid:#23683F; --pending:#7A6E68;
   color-scheme:light;
@@ -220,6 +253,22 @@ button.kal-sel:hover{border-color:var(--accent)}
 .n-nama{font-family:var(--f-hand);font-size:20px;overflow-wrap:anywhere}
 .n-pesan{font-size:12.5px;color:var(--ink-soft);overflow-wrap:anywhere}
 .n-harga{font-size:11.5px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+/* tombol ± & kotak "dibayar berapa" */
+.n-tombol{display:inline-flex;align-items:center;gap:4px}
+.n-pm{display:grid;place-items:center;flex:none;width:26px;height:26px;padding:0;border-radius:50%;border:1.5px solid var(--rule);background:rgb(255 255 255 / .35);color:var(--ink-soft);font-size:15px;font-weight:700;line-height:1;cursor:pointer}
+.n-pm:hover,.n-pm[aria-expanded="true"]{border-color:var(--accent);color:var(--accent-ink)}
+.n-pm.ada{background:var(--accent-bg);border-color:var(--accent);color:var(--accent-ink)}
+.n-bayar{font-size:11.5px;line-height:1.35;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.n-bayar b{font-weight:700}
+.n-bayar .kurang,.n-bayar-ramal.kurang{color:var(--owe)}
+.n-bayar .lebih,.n-bayar-ramal.lebih{color:var(--accent-ink)}
+.n-bayar .ok,.n-bayar-ramal.ok{color:var(--paid)}
+.n-bayar-edit{grid-column:1 / -1;display:flex;flex-direction:column;gap:6px;background:rgb(255 255 255 / .45);border:1.5px dashed var(--ink-soft);border-radius:10px;padding:10px}
+.n-bayar-edit label{font-size:12.5px;font-weight:600}
+.n-bayar-edit input[type=text]{padding:7px 9px;font-size:14px;background:#fff;font-variant-numeric:tabular-nums}
+.n-bayar-harus{font-size:12px;color:var(--ink-soft)}
+.n-bayar-ramal{font-size:12.5px;font-weight:700}
+.n-bayar-ramal:empty{display:none}
 .n-nom{font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:600;font-size:14px}
 .n-nom.belum{font-weight:500;font-size:12px;color:var(--ink-soft)}
 .nom-btn{all:unset;cursor:pointer;font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:600;font-size:14px;border-radius:5px;padding:2px 5px;margin:-2px -5px}
@@ -234,6 +283,13 @@ button.kal-sel:hover{border-color:var(--accent)}
 .n-lunas[aria-pressed="true"]{background:var(--paid);border-color:var(--paid);color:#fff}
 .n-lunas[aria-pressed="true"]::before{content:"✓"}
 .n-lunas:disabled{opacity:.45;cursor:default}
+.n-lunas[aria-pressed="true"]:disabled{opacity:.7}
+/* Sticky note sempit (HP): nominal & tombolnya numpuk di kanan, biar namanya tetap lega */
+@container (max-width:300px){
+  .n-line{grid-template-columns:minmax(0,1fr) auto;gap:4px 8px}
+  .n-who{grid-row:span 2}
+  .n-line>.nom-btn,.n-line>.n-nom,.n-line>.isi,.n-line>.nom-edit,.n-line>.n-tombol,.n-line>.n-ket{justify-self:end}
+}
 .n-ket{font-size:12px;font-weight:600;color:var(--ink-soft)}
 .n-ket.ok{color:var(--paid)}
 .n-ikut{align-self:flex-start;font-family:var(--f-hand);font-size:18px;border:1.5px dashed var(--ink-soft);background:rgb(255 255 255 / .3);color:var(--ink);border-radius:10px;padding:4px 12px;cursor:pointer}
@@ -295,6 +351,12 @@ button.kal-sel:hover{border-color:var(--accent)}
 .d-ket{font-size:12px;color:var(--ink-soft);overflow-wrap:anywhere}
 .d-nom{font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:600}
 .potong{font-size:12.5px;color:var(--ink-soft);background:var(--paper);border:1px dashed var(--rule);border-radius:8px;padding:6px 10px}
+/* simpanan dari kelebihan bayar */
+.simpanan{display:flex;flex-direction:column;gap:6px;background:var(--accent-soft);border:1px dashed var(--accent);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.simpanan-judul{font-size:14px;font-weight:700}
+.simpanan-ket{font-size:12px;color:var(--ink-soft)}
+.simpanan ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.simpanan li{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:2px 8px;font-size:13.5px}
 .mini{font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;border:1.5px solid var(--rule);background:transparent;color:var(--ink);cursor:pointer;white-space:nowrap}
 .mini:hover{border-color:var(--paid);color:var(--paid)}
 .mini.yakin{background:var(--paid);border-color:var(--paid);color:var(--paper)}
@@ -485,11 +547,12 @@ button.kal-sel:hover{border-color:var(--accent)}
   input:not([type=checkbox]):not([type=radio]),select,textarea{font-size:16px!important}
   /* tombol kecil dibikin lebih gampang dipencet jari */
   .mini,.n-lunas,.isi,.chip{min-height:36px}
+  .n-pm{width:36px;height:36px}
   .n-riwayat-btn{padding:8px 0}
   .tema span{padding:7px 12px}
   .nom-edit{width:120px}
 }
 @media (prefers-reduced-motion:reduce){
-  .note.baru,.note.sorot,.status[data-state="loading"] .dot,.parade .stk{animation:none}
-  .note,.btn{transition:none}
+  .note.baru,.note.sorot,.status[data-state="loading"] .dot,.parade .stk,.polaroid.cuci img{animation:none}
+  .note,.btn,.polaroid{transition:none}
 }

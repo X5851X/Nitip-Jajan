@@ -9,7 +9,7 @@ function tambahBaris(o = {}) {
   const harga = "harga" in o ? o.harga : o.jumlah; // yang diketik = harga, bukan tagihan akhir
   const nom = harga == null ? "" : String(harga);
   const pv = previewNominal(nom);
-  const row = h("div", { class: "row", "data-id": id, "data-lunas": o.lunas ? "1" : "0" },
+  const row = h("div", { class: "row", "data-id": id, "data-lunas": ("lunasAsli" in o ? o.lunasAsli : o.lunas) ? "1" : "0", "data-bayar": o.bayar },
     h("input", { class: "r-nama", id: "r-nama-" + id, type: "text", maxlength: "30", autocomplete: "off", placeholder: "nama, misal: kelinci", "aria-label": "Nama yang nitip", value: o.nama || "" }),
     h("input", { class: "r-pesan", id: "r-pesan-" + id, type: "text", maxlength: "80", autocomplete: "off", placeholder: "nitip apa (opsional)", "aria-label": "Nitip apa", value: o.pesanan || "" }),
     h("div", { class: "r-nom-wrap" },
@@ -232,6 +232,7 @@ async function simpanForm(ev) {
     const j = parseNominal(iNom.value);
     if (Number.isNaN(j)) return formError(`Nominal “${iNom.value.trim()}” gak kebaca. Coba tulis 25000 atau 25k.`, iNom);
     orang[row.dataset.id] = { nama, pesanan, jumlah: j, lunas: j != null && j > 0 && row.dataset.lunas === "1", urut: ++urut };
+    if (row.dataset.bayar) orang[row.dataset.id].bayar = Number(row.dataset.bayar); // catatan bayar dari tombol ± jangan ilang
   }
   const transfer = [];
   for (const row of $("#tf-rows").children) {
@@ -267,7 +268,7 @@ async function simpanForm(ev) {
       // Orang yang ikut nitip pas form ini lagi kebuka jangan sampai ilang.
       for (const l of baris(lama.data)) {
         if (!S.form.asal.has(l.id) && !orang[l.id] && !seen.has(kunci(l.nama)))
-          orang[l.id] = { nama: l.nama, pesanan: l.pesanan, jumlah: l.harga, lunas: l.lunas, urut: ++urut };
+          orang[l.id] = { nama: l.nama, pesanan: l.pesanan, jumlah: l.harga, lunas: l.lunasAsli, urut: ++urut, ...(l.bayar != null ? { bayar: l.bayar } : {}) };
       }
       const beda = bedaCatatan(lama.data, isi);
       const body = { ...isi, dibuat: Number(lama.data.dibuat) || now, diubah: now, riwayat: riwayatPlus(lama.data, beda ? `ngedit: ${beda}` : "") };
@@ -295,7 +296,7 @@ async function simpanForm(ev) {
 function pilihTanggal(iso, gulir) {
   const d = parseTgl(iso);
   if (!d) return;
-  S.tglPilih = iso; S.join = null; S.editing = null;
+  S.tglPilih = iso; S.join = null; S.editing = null; S.bayar = null;
   S.bulan = [d.getFullYear(), d.getMonth()];
   try { history.replaceState(null, "", "#" + iso); } catch { /* abaikan */ }
   renderKalender();
@@ -363,14 +364,90 @@ function simpanNom(dariBlur) {
   aman(ed.id, () => S.store.update(ed.id, paths),
     j == null ? `Nominal ${l.nama} dikosongin` : j === 0 ? `${l.nama} ditraktir, asik!` : `Nominal ${l.nama} jadi ${rp(j)}`);
 }
+/* Tanda lunas. Yang simpel cukup tandanya; kalau udah ada bayaran atau kepotong simpanan, `bayar`-nya ikut dipasin sama sisanya. */
+function pathsLunas(lineId, l, v) {
+  const p = "orang." + lineId + ".";
+  if (!v) return { [p + "lunas"]: false, ...(l.bayar != null ? { [p + "bayar"]: HAPUS_FIELD } : {}) };
+  if (l.bayar == null && !l.ketutup) return { [p + "lunas"]: true };
+  return { [p + "lunas"]: true, [p + "bayar"]: (l.bayar || 0) + l.sisa };
+}
 function toggleLunas(id, lineId) {
   const l = cariBaris(id, lineId);
   if (!l || l.jumlah == null || !bolehNulis()) return;
   const v = !l.lunas;
   S.fokus = { id, fk: "lunas:" + lineId };
-  const paths = tambahRiwayat({ ["orang." + lineId + ".lunas"]: v, diubah: Date.now() }, cariDoc(id).data,
+  const paths = tambahRiwayat({ ...pathsLunas(lineId, l, v), diubah: Date.now() }, cariDoc(id).data,
     v ? `nandain ${l.nama} lunas` : `batalin lunas ${l.nama}`);
   aman(id, () => S.store.update(id, paths), v ? `${l.nama} lunas, mantap!` : `${l.nama} balik ke belum lunas`);
+}
+/* Tombol ±: catat dibayar berapa, kalau lebih atau kurang dari tagihannya. */
+function mulaiBayar(id, lineId) {
+  if (S.bayar && S.bayar.id === id && S.bayar.lineId === lineId) { tutupBayar(); return; }
+  const l = cariBaris(id, lineId);
+  if (!l || l.jumlah == null || !bolehNulis()) return;
+  S.bayar = { id, lineId, value: l.bayar != null ? String(l.bayar) : "" };
+  S.editing = null;
+  S.fokus = { id, fk: "bayar-edit:" + lineId };
+  renderPapan();
+}
+function tutupBayar() {
+  const b = S.bayar;
+  if (!b) return;
+  S.bayar = null;
+  S.fokus = { id: b.id, fk: "pm:" + b.lineId };
+  renderPapan();
+}
+/* Update tulisan "lebih/kurang" pas ngetik, tanpa gambar ulang catatannya. */
+function updRamalBayar(form) {
+  const b = S.bayar, doc = b && cariDoc(b.id);
+  if (!doc) return;
+  const r = ramalTeks(doc.data, b.lineId, b.value), el = $(".n-bayar-ramal", form);
+  el.textContent = r.teks;
+  el.className = "n-bayar-ramal " + r.jenis;
+}
+function simpanBayar() {
+  const b = S.bayar;
+  if (!b) return;
+  const j = parseNominal(b.value);
+  if (Number.isNaN(j)) { toast(`Nominal “${b.value.trim()}” gak kebaca. Coba tulis 57000 atau 57k.`); return; }
+  const doc = cariDoc(b.id), l = cariBaris(b.id, b.lineId);
+  S.bayar = null;
+  S.fokus = { id: b.id, fk: "pm:" + b.lineId };
+  renderPapan();
+  if (!doc || !l || (j || null) === l.bayar) return;
+  const p = "orang." + b.lineId + ".";
+  const paths = { diubah: Date.now() };
+  let teks, pesan;
+  if (!j) {
+    paths[p + "bayar"] = HAPUS_FIELD;
+    paths[p + "lunas"] = false;
+    teks = `hapus catatan bayar ${l.nama}`;
+    pesan = `Catatan bayar ${l.nama} dihapus`;
+  } else {
+    const r = ramalBayar(doc.data, b.lineId, j);
+    paths[p + "bayar"] = j;
+    paths[p + "lunas"] = j >= l.jumlah;
+    teks = `nyatet ${l.nama} bayar ${rp(j)}. ${r.teks}`;
+    pesan = `${l.nama} bayar ${rp(j)}. ${r.teks}`;
+  }
+  tambahRiwayat(paths, doc.data, teks);
+  aman(b.id, () => S.store.update(b.id, paths), pesan);
+}
+/* Simpanannya dibalikin ke orangnya: bayaran yang kelebihan dikurangin, mulai dari yang paling baru. */
+async function balikinSimpanan(dk, pk) {
+  const p = bukuBayar().simpanan.find((x) => x.key === dk && x.pk === pk);
+  if (!p || !bolehNulis()) return;
+  const jumlah = p.simpanan;
+  let sisa = jumlah, semua = true;
+  for (const b of [...p.baris].reverse()) {
+    const lebih = b.masuk - (b.tagihan || 0), doc = cariDoc(b.docId);
+    if (sisa <= 0 || lebih <= 0 || !doc) continue;
+    const t = Math.min(sisa, lebih);
+    sisa -= t;
+    const paths = tambahRiwayat({ [`orang.${b.lineId}.bayar`]: b.masuk - t, diubah: Date.now() }, doc.data, `balikin simpanan ${p.nama} ${rp(t)}`);
+    semua = (await aman(b.docId, () => S.store.update(b.docId, paths))) && semua;
+  }
+  if (semua) toast(`Simpanan ${p.nama} ${rp(jumlah)} udah dibalikin`);
 }
 function bukaJoin(id) {
   if (!bolehNulis()) return;
@@ -425,8 +502,117 @@ function pilihTiket(id) {
 async function lunasinBaris(id, lineId) {
   const l = cariBaris(id, lineId);
   if (!l || l.jumlah == null || !bolehNulis()) return;
-  const paths = tambahRiwayat({ ["orang." + lineId + ".lunas"]: true, diubah: Date.now() }, cariDoc(id).data, `nandain ${l.nama} lunas`);
+  const paths = tambahRiwayat({ ...pathsLunas(lineId, l, true), diubah: Date.now() }, cariDoc(id).data, `nandain ${l.nama} lunas`);
   await aman(id, () => S.store.update(id, paths), `${l.nama} lunas, mantap!`);
+}
+
+/* ---------- foto di papan ---------- */
+const MAKS_FOTO_BYTES = 1400000, MAKS_FOTO_TANGGAL = 12;
+function muatGambar(file) {
+  return new Promise((ok, gagal) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => ok({ img, url });
+    img.onerror = () => { URL.revokeObjectURL(url); gagal(new Error("gambar nggak kebaca")); };
+    img.src = url;
+  });
+}
+/* Dikecilin di browser dulu (JPEG, maks 1600px) biar hemat tempat. Data lokasi di dalam foto ikut kebuang. */
+async function kecilinFoto(file) {
+  const { img, url } = await muatGambar(file);
+  try {
+    for (const [maks, kualitas] of [[1600, 0.82], [1280, 0.72], [1024, 0.6]]) {
+      const r = Math.min(1, maks / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.round(img.naturalWidth * r), t = Math.round(img.naturalHeight * r);
+      const c = document.createElement("canvas");
+      c.width = w; c.height = t;
+      const g = c.getContext("2d");
+      g.fillStyle = "#fff"; // gambar transparan jadi putih, bukan hitam
+      g.fillRect(0, 0, w, t);
+      g.drawImage(img, 0, 0, w, t);
+      const blob = await new Promise((selesai) => c.toBlob(selesai, "image/jpeg", kualitas));
+      if (blob && blob.size <= MAKS_FOTO_BYTES) return { blob, w, t };
+    }
+  } finally { URL.revokeObjectURL(url); }
+  throw new Error("fotonya kegedean");
+}
+const bisaTempelFoto = () => !!(S.store && S.store.foto) && bolehNulis();
+async function tempelFoto(files) {
+  if (!bisaTempelFoto()) return;
+  const tanggal = S.tglPilih;
+  let daftar = [...files].filter((f) => !f.type || f.type.startsWith("image/"));
+  if (!daftar.length) { toast("Itu bukan foto. Pilih gambar ya."); return; }
+  const muat = MAKS_FOTO_TANGGAL - S.foto.filter((f) => f.data.tanggal === tanggal).length - S.fotoNaik.filter((n) => n.tanggal === tanggal).length;
+  if (muat <= 0) { toast(`Satu tanggal maksimal ${MAKS_FOTO_TANGGAL} foto. Copot yang lain dulu ya.`); return; }
+  if (daftar.length > muat) { toast(`Cuma muat ${muat} foto lagi di tanggal ini.`); daftar = daftar.slice(0, muat); }
+  const naik = daftar.map((file) => ({ id: S.store.newId(), tanggal, url: "", file }));
+  S.fotoNaik.push(...naik);
+  renderFoto();
+  let berhasil = 0;
+  for (const n of naik) {
+    try {
+      const { blob, w, t } = await kecilinFoto(n.file);
+      n.url = URL.createObjectURL(blob);
+      S.fotoLokal.set(n.id, n.url);
+      renderFoto();
+      await S.store.foto.tempel(n.id, blob, { tanggal, oleh: S.aku || "", w, h: t });
+      berhasil++;
+    } catch (e) {
+      console.warn("Nitip Yuk: gagal nempel foto", e);
+      toast(e && e.code ? e.message : "Foto itu nggak kebaca browser. Coba JPG atau PNG ya.");
+      if (n.url) { URL.revokeObjectURL(n.url); S.fotoLokal.delete(n.id); }
+    }
+    S.fotoNaik = S.fotoNaik.filter((x) => x !== n);
+    renderFoto();
+  }
+  if (berhasil) toast(berhasil > 1 ? `${berhasil} foto udah nempel!` : "Fotonya udah nempel!");
+}
+let fotoYakinT;
+function resetHapusFoto() {
+  clearTimeout(fotoYakinT);
+  const b = $("#foto-hapus");
+  b.dataset.yakin = "";
+  b.textContent = "Copot foto";
+  b.classList.remove("solid");
+}
+function bukaFoto(id) {
+  const f = S.foto.find((x) => x.id === id);
+  if (!f) return;
+  S.fotoBuka = id;
+  const img = $("#foto-besar");
+  img.src = S.fotoLokal.get(id) || S.store.foto.alamat(id);
+  img.alt = f.data.ket || "Foto di papan";
+  const ket = $("#foto-ket");
+  ket.value = f.data.ket || "";
+  ket.disabled = !bolehNulis();
+  $("#foto-hapus").hidden = !bolehNulis();
+  resetHapusFoto();
+  $("#foto-info").textContent = [f.data.oleh ? `Ditempel ${f.data.oleh}` : "", f.data.dibuat ? waktuRiwayat(f.data.dibuat) : ""].filter(Boolean).join(" · ");
+  $("#dlg-foto").showModal();
+}
+/* Keterangan kesimpen pas kolomnya ditinggal atau fotonya ditutup. */
+async function simpanKetFoto() {
+  const id = S.fotoBuka, f = S.foto.find((x) => x.id === id);
+  if (!f || !bolehNulis()) return;
+  const ket = rapikan($("#foto-ket").value).slice(0, 60);
+  if (ket === (f.data.ket || "")) return;
+  try { await S.store.foto.ubah(id, ket); }
+  catch (e) { gagal(e); }
+}
+async function copotFoto() {
+  const id = S.fotoBuka, b = $("#foto-hapus");
+  if (!id || !bolehNulis()) return;
+  if (!b.dataset.yakin) {
+    b.dataset.yakin = "1";
+    b.textContent = "Yakin, copot!";
+    b.classList.add("solid");
+    fotoYakinT = setTimeout(resetHapusFoto, 5000);
+    return;
+  }
+  resetHapusFoto();
+  S.fotoBuka = null; // biar pas nutup nggak nyimpen keterangan foto yang udah dicopot
+  $("#dlg-foto").close();
+  try { await S.store.foto.copot(id); toast("Fotonya udah dicopot"); }
+  catch (e) { gagal(e); }
 }
 
 /* ---------- copas pengingat ---------- */
@@ -502,6 +688,8 @@ function pasangEvent() {
     const id = note.dataset.id, a = b.dataset.act;
     if (a === "edit-nom") mulaiEditNom(id, b.dataset.line);
     else if (a === "lunas") toggleLunas(id, b.dataset.line);
+    else if (a === "bayar") mulaiBayar(id, b.dataset.line);
+    else if (a === "bayar-batal") tutupBayar();
     else if (a === "ikut") bukaJoin(id);
     else if (a === "ikut-batal") tutupJoin(id);
     else if (a === "ingetin") ingetinCatatan(id);    else if (a === "riwayat") {
@@ -514,10 +702,15 @@ function pasangEvent() {
     else if (a === "hapus-yakin") hapus(id);
     else if (a === "hapus-batal") { setConfirm(null); S.fokus = { id, fk: "hapus" }; renderPapan(); }
   });
-  papan.addEventListener("submit", (e) => { const f = e.target.closest(".n-join"); if (f) { e.preventDefault(); simpanJoin(f.dataset.id); } });
+  papan.addEventListener("submit", (e) => {
+    const f = e.target.closest(".n-join");
+    if (f) { e.preventDefault(); simpanJoin(f.dataset.id); return; }
+    if (e.target.closest(".n-bayar-edit")) { e.preventDefault(); simpanBayar(); }
+  });
   papan.addEventListener("input", (e) => {
     const t = e.target;
     if (t.classList.contains("nom-edit")) { if (S.editing) S.editing.value = t.value; return; }
+    if (t.classList.contains("bayar-edit")) { if (S.bayar) { S.bayar.value = t.value; updRamalBayar(t.closest(".n-bayar-edit")); } return; }
     if (!S.join) return;
     if (t.classList.contains("j-nama")) S.join.nama = t.value;
     else if (t.classList.contains("j-pesan")) S.join.pesan = t.value;
@@ -529,6 +722,7 @@ function pasangEvent() {
       if (e.key === "Enter") { e.preventDefault(); simpanNom(false); }
       else if (e.key === "Escape") { e.preventDefault(); batalNom(); }
     } else if (e.key === "Escape" && t.closest(".n-join")) { e.preventDefault(); tutupJoin(t.closest(".note").dataset.id); }
+    else if (e.key === "Escape" && t.closest(".n-bayar-edit")) { e.preventDefault(); tutupBayar(); }
   });
   papan.addEventListener("focusout", (e) => { if (e.target.classList.contains("nom-edit") && S.editing && !S.rebuilding) simpanNom(true); });
 
@@ -545,7 +739,48 @@ function pasangEvent() {
       else setConfirm({ kind: "lunasin", id, line });
       renderRekap();
     }
+    else if (act === "balikin" && bolehNulis()) {
+      const { dk, pk } = b.dataset;
+      if (S.confirm && S.confirm.kind === "simpanan" && S.confirm.dk === dk && S.confirm.pk === pk) { setConfirm(null); balikinSimpanan(dk, pk); }
+      else setConfirm({ kind: "simpanan", dk, pk });
+      renderRekap();
+    }
   });
+  // Foto di papan: tombol tempel, seret file ke papan, atau tempel dari clipboard
+  $("#papan-foto").addEventListener("click", (e) => {
+    const f = e.target.closest("[data-foto]");
+    if (f) bukaFoto(f.dataset.foto);
+    else if (e.target.closest("#foto-tambah")) $("#foto-file").click();
+  });
+  $("#foto-file").addEventListener("change", (e) => {
+    const files = [...e.target.files];
+    e.target.value = "";
+    tempelFoto(files);
+  });
+  const wrap = $("#papan-wrap");
+  const adaFile = (e) => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+  wrap.addEventListener("dragover", (e) => { if (bisaTempelFoto() && adaFile(e)) { e.preventDefault(); wrap.classList.add("seret"); } });
+  wrap.addEventListener("dragleave", (e) => { if (!wrap.contains(e.relatedTarget)) wrap.classList.remove("seret"); });
+  wrap.addEventListener("drop", (e) => {
+    wrap.classList.remove("seret");
+    if (!bisaTempelFoto() || !adaFile(e)) return;
+    e.preventDefault();
+    tempelFoto(e.dataTransfer.files);
+  });
+  document.addEventListener("paste", (e) => {
+    const t = e.target, lagiNgetik = t && t.closest && t.closest("input,textarea,select,[contenteditable]");
+    if (lagiNgetik || document.querySelector("dialog[open]") || !bisaTempelFoto()) return;
+    const files = [...((e.clipboardData && e.clipboardData.files) || [])].filter((f) => f.type.startsWith("image/"));
+    if (files.length) { e.preventDefault(); tempelFoto(files); }
+  });
+  // Foto gede
+  const dlgFoto = $("#dlg-foto");
+  $("#foto-x").addEventListener("click", () => dlgFoto.close());
+  dlgFoto.addEventListener("click", (e) => { if (e.target === dlgFoto) dlgFoto.close(); });
+  dlgFoto.addEventListener("close", () => { simpanKetFoto(); S.fotoBuka = null; });
+  $("#foto-ket").addEventListener("change", simpanKetFoto);
+  $("#foto-ket").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.target.blur(); } });
+  $("#foto-hapus").addEventListener("click", copotFoto);
   $("#aku-select").addEventListener("change", (e) => { setAku(e.target.value); renderRekap(); });
 
   // Copas pengingat
@@ -649,6 +884,7 @@ function langganan() {
     S.loaded = true;
     if (S.galat) { S.galat = ""; setStatus("ok", ""); setNotice(); }
     if (S.editing && !cariBaris(S.editing.id, S.editing.lineId)) S.editing = null;
+    if (S.bayar && !cariBaris(S.bayar.id, S.bayar.lineId)) S.bayar = null;
     if (S.join && !cariDoc(S.join.id)) S.join = null;
     renderSemua();
     // Dibuka dari link catatan: langsung gulir & sorot catatannya (sekali aja)
@@ -661,6 +897,19 @@ function langganan() {
     setStatus("error", "Gagal nyambung");
     setNotice(S.galat);
     renderSemua();
+  });
+  if (!S.store.foto) return;
+  let awal = true;
+  S.store.foto.subscribe((list) => {
+    for (const f of list) {
+      if (!awal && !S.fotoKenal.has(f.id)) S.fotoBaru.add(f.id);
+      S.fotoKenal.add(f.id);
+    }
+    awal = false;
+    S.foto = list;
+    if (S.fotoBuka && !list.some((f) => f.id === S.fotoBuka)) { S.fotoBuka = null; $("#dlg-foto").close(); } // dicopot orang lain
+    renderKalender();
+    renderPapan();
   });
 }
 function siapkanHalaman() {
