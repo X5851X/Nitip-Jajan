@@ -7,4 +7,5 @@ worker.js
 wrangler.jsonc
 firestore.rules
 README.md
+LICENSE
 docs

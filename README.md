@@ -89,3 +89,7 @@ Web ini cuma file statis (HTML, CSS, JS) tanpa proses build, jadi tinggal kamu d
 - **Config Firebase bukan rahasia.** Config untuk web memang selalu kelihatan di browser. Yang ngatur siapa boleh apa adalah rules Firestore.
 - **Siapa aja yang tahu link bisa ngedit.** Server di `worker.js` dan rules Firestore sama-sama ngizinin siapa aja baca dan nulis, sesuai permintaan "bisa diedit siapa aja". Yang dicek cuma bentuk dan ukuran datanya. Jadi bagiin link-nya cuma di grup kamu, dan pakai alias.
 - **Kalau nanti mau dikunci,** bisa ditambah login Google dengan daftar email anggota tim di rules.
+
+## Lisensi
+
+MIT. Lihat [LICENSE](LICENSE).
